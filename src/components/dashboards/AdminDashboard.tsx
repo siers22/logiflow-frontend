@@ -10,6 +10,8 @@ import {
   Edit,
   Trash2,
   Activity,
+  Truck,
+  ClipboardCheck,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -163,7 +165,7 @@ export function AdminDashboard() {
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Водителей</CardTitle>
-              <Users className="w-4 h-4 text-orange-600" />
+              <Truck className="w-4 h-4 text-orange-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -191,12 +193,15 @@ export function AdminDashboard() {
         <Tabs defaultValue="users" className="space-y-6">
           <TabsList>
             <TabsTrigger variant="glass" value="users">
+              <Users className="w-4 h-4 mr-2" />
               Пользователи
             </TabsTrigger>
             <TabsTrigger variant="glass" value="orders">
+              <ClipboardCheck className="w-4 h-4 mr-2" />
               Заказы
             </TabsTrigger>
             <TabsTrigger variant="glass" value="drivers">
+              <Truck className="w-4 h-4 mr-2" />
               Водители
             </TabsTrigger>
             <TabsTrigger variant="glass" value="microservices">
@@ -204,6 +209,7 @@ export function AdminDashboard() {
               Микросервисы
             </TabsTrigger>
             <TabsTrigger variant="glass" value="settings">
+              <Settings classname="w-4 h-4 mr-2" />
               Настройки
             </TabsTrigger>
           </TabsList>
