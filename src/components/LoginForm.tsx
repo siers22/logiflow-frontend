@@ -72,8 +72,8 @@ export function LoginForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <Button
-        variant="ghost"
-        size="sm"
+        variant="glass_outline"
+        size="default"
         onClick={(e) => toggleTheme(e)}
         title={theme === "dark" ? "Светлая тема" : "Темная тема"}
         className="absolute top-4 right-4"
@@ -85,7 +85,7 @@ export function LoginForm() {
         )}
       </Button>
 
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md z-1">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Package className="w-12 h-12 text-blue-600 dark:text-blue-400" />

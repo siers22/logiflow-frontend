@@ -51,7 +51,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex items-center gap-4">
               <Button
                 variant="glass_outline"
-                size="sm"
+                size="default"
                 onClick={(e) => toggleTheme(e)}
                 title={theme === "dark" ? "Светлая тема" : "Темная тема"}
               >
@@ -61,7 +61,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Moon className="w-5 h-5" />
                 )}
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="glass_outline" size="default">
                 <Bell className="w-5 h-5" />
               </Button>
               <div className="flex items-center gap-3">

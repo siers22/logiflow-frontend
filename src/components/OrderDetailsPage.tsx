@@ -153,7 +153,11 @@ export function OrderDetailsPage({ orderId }: OrderDetailsPageProps) {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()}>
+          <Button
+            variant="glass_outline"
+            size="default"
+            onClick={() => router.back()}
+          >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1">

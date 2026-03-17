@@ -64,7 +64,7 @@ export function ClientDashboard() {
           </div>
           <Dialog open={isNewOrderOpen} onOpenChange={setIsNewOrderOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button variant="glass_outline">
                 <Plus className="w-4 h-4 mr-2" />
                 Новая заявка
               </Button>
