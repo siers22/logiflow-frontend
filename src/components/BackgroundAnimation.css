@@ -1,0 +1,157 @@
+/* === Анимируемые позиции === */
+@property --34-x-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 6.523437500000001%;
+}
+@property --34-y-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 94.2578125%;
+}
+@property --35-x-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 7.929687500000003%;
+}
+@property --35-y-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 6.328124999999997%;
+}
+@property --36-x-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 94.2578125%;
+}
+@property --36-y-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 53.43750000000001%;
+}
+@property --37-x-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 48.75000000000001%;
+}
+@property --37-y-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 49.14062500000001%;
+}
+
+/* === Анимируемые цвета — именно @property позволяет их плавно переключать === */
+@property --bg-color-1 {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #f0f9ff;
+}
+@property --bg-color-2 {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #7dd3fc;
+}
+@property --bg-color-3 {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #3b82f6;
+}
+@property --bg-color-4 {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #bae6fd;
+}
+@property --bg-base {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #e0f2fe;
+}
+
+/* === Светлая тема === */
+:root {
+    --bg-color-1: #f0f9ff;
+    --bg-color-2: #7dd3fc;
+    --bg-color-3: #3b82f6;
+    --bg-color-4: #bae6fd;
+    --bg-base: #e0f2fe;
+}
+
+/* === Тёмная тема === */
+.dark {
+    --bg-color-1: #ffffff;
+    --bg-color-2: #3cc2dd;
+    --bg-color-3: #007bff;
+    --bg-color-4: #9eecff;
+    --bg-base: #1b253b;
+}
+
+/* === Сам фон === */
+.background-animation {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+
+    background:
+        radial-gradient(
+            100% 100% at var(--37-x-position) var(--37-y-position),
+            var(--bg-color-1) -75%,
+            transparent
+        ),
+        radial-gradient(
+            100% 100% at var(--34-x-position) var(--34-y-position),
+            var(--bg-color-2) 0%,
+            transparent
+        ),
+        radial-gradient(
+            100% 100% at var(--35-x-position) var(--35-y-position),
+            var(--bg-color-3) 0%,
+            transparent
+        ),
+        radial-gradient(
+            100% 100% at var(--36-x-position) var(--36-y-position),
+            var(--bg-color-4) 0%,
+            transparent
+        ),
+        var(--bg-base);
+
+    /* Позиции анимируются через keyframes, цвета — через transition */
+    animation: bg-main 5s ease-in-out infinite;
+    transition:
+        --bg-color-1 0.8s ease,
+        --bg-color-2 0.8s ease,
+        --bg-color-3 0.8s ease,
+        --bg-color-4 0.8s ease,
+        --bg-base 0.8s ease;
+
+    /* Не замораживать фон в снапшот view-transition */
+    /*view-transition-name: background-layer;*/
+}
+
+/* Исключаем фон из анимации view-transition (он продолжает жить сам по себе) */
+/*::view-transition-old(background-layer),
+::view-transition-new(background-layer) {
+    animation: none;
+    mix-blend-mode: normal;*/
+/*}*/
+
+@keyframes bg-main {
+    25% {
+        --34-x-position: 100%;
+        --34-y-position: 100%;
+        --35-x-position: 85%;
+        --35-y-position: 80%;
+        --36-x-position: 100%;
+        --36-y-position: 100%;
+    }
+    50% {
+        --34-x-position: 80%;
+        --34-y-position: 15%;
+        --35-x-position: 15%;
+        --35-y-position: 85%;
+        --36-x-position: 20%;
+        --36-y-position: 20%;
+        --37-x-position: 20%;
+        --37-y-position: 20%;
+    }
+}

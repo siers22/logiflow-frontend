@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-
+import "./css/glass-card.css";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
@@ -19,6 +19,8 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        glass: "glass-card",
+        glass_outline: "glass-card-outline",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
