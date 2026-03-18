@@ -1,157 +1,131 @@
-/* === Анимируемые позиции === */
-@property --34-x-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 6.523437500000001%;
-}
-@property --34-y-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 94.2578125%;
-}
-@property --35-x-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 7.929687500000003%;
-}
-@property --35-y-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 6.328124999999997%;
-}
-@property --36-x-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 94.2578125%;
-}
-@property --36-y-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 53.43750000000001%;
-}
-@property --37-x-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 48.75000000000001%;
-}
-@property --37-y-position {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 49.14062500000001%;
-}
-
-/* === Анимируемые цвета — именно @property позволяет их плавно переключать === */
-@property --bg-color-1 {
-    syntax: "<color>";
-    inherits: true;
-    initial-value: #f0f9ff;
-}
-@property --bg-color-2 {
-    syntax: "<color>";
-    inherits: true;
-    initial-value: #7dd3fc;
-}
-@property --bg-color-3 {
-    syntax: "<color>";
-    inherits: true;
-    initial-value: #3b82f6;
-}
-@property --bg-color-4 {
-    syntax: "<color>";
-    inherits: true;
-    initial-value: #bae6fd;
-}
+/* Только bg-base нужен @property — он меняется при смене темы */
 @property --bg-base {
     syntax: "<color>";
     inherits: true;
     initial-value: #e0f2fe;
 }
 
-/* === Светлая тема === */
 :root {
-    --bg-color-1: #f0f9ff;
-    --bg-color-2: #7dd3fc;
-    --bg-color-3: #3b82f6;
-    --bg-color-4: #bae6fd;
     --bg-base: #e0f2fe;
+    --blob-1: #7dd3fc;
+    --blob-2: #3b82f6;
+    --blob-3: #bae6fd;
+    --blob-4: #f0f9ff;
 }
 
-/* === Тёмная тема === */
 .dark {
-    --bg-color-1: #ffffff;
-    --bg-color-2: #3cc2dd;
-    --bg-color-3: #007bff;
-    --bg-color-4: #9eecff;
     --bg-base: #1b253b;
+    --blob-1: #3cc2dd;
+    --blob-2: #007bff;
+    --blob-3: #9eecff;
+    --blob-4: rgba(255, 255, 255, 0.6);
 }
 
-/* === Сам фон === */
-.background-animation {
+.bg-root {
     position: fixed;
     inset: 0;
     z-index: 0;
     pointer-events: none;
-
-    background:
-        radial-gradient(
-            100% 100% at var(--37-x-position) var(--37-y-position),
-            var(--bg-color-1) -75%,
-            transparent
-        ),
-        radial-gradient(
-            100% 100% at var(--34-x-position) var(--34-y-position),
-            var(--bg-color-2) 0%,
-            transparent
-        ),
-        radial-gradient(
-            100% 100% at var(--35-x-position) var(--35-y-position),
-            var(--bg-color-3) 0%,
-            transparent
-        ),
-        radial-gradient(
-            100% 100% at var(--36-x-position) var(--36-y-position),
-            var(--bg-color-4) 0%,
-            transparent
-        ),
-        var(--bg-base);
-
-    /* Позиции анимируются через keyframes, цвета — через transition */
-    animation: bg-main 5s ease-in-out infinite;
-    transition:
-        --bg-color-1 0.8s ease,
-        --bg-color-2 0.8s ease,
-        --bg-color-3 0.8s ease,
-        --bg-color-4 0.8s ease,
-        --bg-base 0.8s ease;
-
-    /* Не замораживать фон в снапшот view-transition */
-    /*view-transition-name: background-layer;*/
+    background-color: var(--bg-base);
+    transition: background-color 0.8s ease;
+    overflow: hidden;
+    /* Создаёт stacking context — backdrop-filter карточек
+       блюрит только внутри этого слоя */
+    isolation: isolate;
 }
 
-/* Исключаем фон из анимации view-transition (он продолжает жить сам по себе) */
-/*::view-transition-old(background-layer),
-::view-transition-new(background-layer) {
-    animation: none;
-    mix-blend-mode: normal;*/
-/*}*/
+.bg-blob {
+    position: absolute;
+    border-radius: 50%;
+    /* filter: blur на самом блобе — не требует
+       перекомпозиции при движении через transform */
+    filter: blur(70px);
+    /* Продвигаем каждый блоб на свой compositor слой.
+       Анимация transform не вызывает repaint. */
+    will-change: transform;
+    /* Переход цвета при смене темы */
+    transition: background-color 0.8s ease;
+}
 
-@keyframes bg-main {
-    25% {
-        --34-x-position: 100%;
-        --34-y-position: 100%;
-        --35-x-position: 85%;
-        --35-y-position: 80%;
-        --36-x-position: 100%;
-        --36-y-position: 100%;
+.bg-blob-1 {
+    width: 55vw;
+    height: 55vw;
+    background-color: var(--blob-1);
+    top: 50%;
+    left: -5%;
+    opacity: 0.75;
+    animation: blob1 9s ease-in-out infinite alternate;
+}
+
+.bg-blob-2 {
+    width: 50vw;
+    height: 50vw;
+    background-color: var(--blob-2);
+    top: -10%;
+    left: -8%;
+    opacity: 0.6;
+    animation: blob2 12s ease-in-out infinite alternate;
+}
+
+.bg-blob-3 {
+    width: 50vw;
+    height: 50vw;
+    background-color: var(--blob-3);
+    top: 15%;
+    right: -8%;
+    opacity: 0.55;
+    animation: blob3 8s ease-in-out infinite alternate;
+}
+
+.bg-blob-4 {
+    width: 38vw;
+    height: 38vw;
+    background-color: var(--blob-4);
+    top: 28%;
+    left: 33%;
+    opacity: 0.5;
+    animation: blob4 10s ease-in-out infinite alternate;
+}
+
+/* alternate — нет рывков при зацикливании,
+   translate вместо top/left — compositor only */
+@keyframes blob1 {
+    from {
+        transform: translate(0, 0) scale(1);
     }
-    50% {
-        --34-x-position: 80%;
-        --34-y-position: 15%;
-        --35-x-position: 15%;
-        --35-y-position: 85%;
-        --36-x-position: 20%;
-        --36-y-position: 20%;
-        --37-x-position: 20%;
-        --37-y-position: 20%;
+    to {
+        transform: translate(14vw, -22vh) scale(1.08);
+    }
+}
+@keyframes blob2 {
+    from {
+        transform: translate(0, 0) scale(1);
+    }
+    to {
+        transform: translate(18vw, 14vh) scale(0.92);
+    }
+}
+@keyframes blob3 {
+    from {
+        transform: translate(0, 0) scale(1);
+    }
+    to {
+        transform: translate(-16vw, 18vh) scale(1.12);
+    }
+}
+@keyframes blob4 {
+    from {
+        transform: translate(0, 0) scale(1);
+    }
+    to {
+        transform: translate(-10vw, -14vh) scale(0.96);
+    }
+}
+
+/* Уважаем prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .bg-blob {
+        animation: none;
+        will-change: auto;
     }
 }
