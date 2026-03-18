@@ -150,6 +150,7 @@ export function ManagerDashboard() {
                       <Button
                         onClick={() => openAssignDialog(order)}
                         className="w-full"
+                        variant="glass_outline_easy"
                       >
                         Назначить водителя
                       </Button>
@@ -294,7 +295,7 @@ export function ManagerDashboard() {
             </div>
             <div className="flex gap-2 justify-end">
               <Button
-                variant="outline"
+                variant="glass_outline_easy"
                 onClick={() => setIsAssignDialogOpen(false)}
               >
                 Отмена

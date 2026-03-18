@@ -30,6 +30,13 @@
     contain: layout style;
     transform: translateZ(0);
 }
+.glass-card-outline-easy {
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 20px;
+
+    contain: layout style;
+    transform: translateZ(0);
+}
 .glass-card::before {
     content: "";
     position: absolute;
