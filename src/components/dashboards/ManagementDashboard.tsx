@@ -8,6 +8,7 @@ import {
   Users,
   Download,
   Calendar,
+  User,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -25,17 +27,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUser } from "@/lib/UserContext";
 import { mockOrders, mockDrivers } from "@/lib/mockData";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -50,9 +51,12 @@ const monthlyData = [
 ];
 
 export function ManagementDashboard() {
-  const [reportPeriod, setReportPeriod] = useState("month");
+  const { user } = useUser();
+  const [period, setPeriod] = useState("month");
 
-  const totalRevenue = mockOrders.reduce((sum, o) => sum + o.price, 0);
+  if (!user) return null;
+
+  const totalRevenue = mockOrders.reduce((s, o) => s + o.price, 0);
   const completedOrders = mockOrders.filter(
     (o) => o.status === "delivered",
   ).length;
@@ -77,21 +81,42 @@ export function ManagementDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Заголовок */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-gray-900 dark:text-gray-100">
               Панель руководства
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Аналитика и отчетность
+              Добро пожаловать, {user.name}
             </p>
           </div>
           <Button>
-            <Download className="w-4 h-4 mr-2" />
-            Экспорт отчета
+            <Download className="w-4 h-4 mr-2" /> Экспорт отчёта
           </Button>
         </div>
 
+        {/* Профиль */}
+        <Card variant="glass">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                <User className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  {user.name}
+                </div>
+                <div className="text-sm text-gray-500">{user.email}</div>
+              </div>
+              <Badge variant="outline" className="ml-auto">
+                Руководство
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI */}
         <div className="grid md:grid-cols-4 gap-6">
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -151,6 +176,7 @@ export function ManagementDashboard() {
           </Card>
         </div>
 
+        {/* График */}
         <Card variant="glass">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -160,7 +186,7 @@ export function ManagementDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-600" />
-                <Select value={reportPeriod} onValueChange={setReportPeriod}>
+                <Select value={period} onValueChange={setPeriod}>
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -175,7 +201,7 @@ export function ManagementDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={280}>
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -204,23 +230,24 @@ export function ManagementDashboard() {
         </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
+          {/* Диаграмма статусов */}
           <Card variant="glass">
             <CardHeader>
               <CardTitle>Статус заказов</CardTitle>
               <CardDescription>Распределение по статусам</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie
                     data={statusData}
                     cx="50%"
                     cy="50%"
+                    outerRadius={90}
                     labelLine={false}
                     label={({ name, percent }) =>
                       `${name} ${(percent * 100).toFixed(0)}%`
                     }
-                    outerRadius={100}
                     dataKey="value"
                   >
                     {statusData.map((entry, i) => (
@@ -233,6 +260,7 @@ export function ManagementDashboard() {
             </CardContent>
           </Card>
 
+          {/* Топ водителей */}
           <Card variant="glass">
             <CardHeader>
               <CardTitle>Топ водителей</CardTitle>
@@ -274,93 +302,6 @@ export function ManagementDashboard() {
             </CardContent>
           </Card>
         </div>
-
-        <Card variant="glass">
-          <CardHeader>
-            <CardTitle>Детальный отчет</CardTitle>
-            <CardDescription>Все заказы за выбранный период</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      ID
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      Клиент
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      Маршрут
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      Водитель
-                    </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      Статус
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600 dark:text-gray-400">
-                      Сумма
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mockOrders.map((order) => (
-                    <tr
-                      key={order.id}
-                      className="border-b hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
-                        {order.id}
-                      </td>
-                      <td className="py-3 px-4 text-gray-900 dark:text-gray-100">
-                        {order.clientName}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="max-w-xs">
-                          <p className="truncate text-gray-600 dark:text-gray-400">
-                            {order.pickupAddress}
-                          </p>
-                          <p className="truncate text-gray-500">
-                            → {order.deliveryAddress}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
-                        {order.driverName ?? "—"}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-1 rounded text-xs text-white ${
-                            order.status === "delivered"
-                              ? "bg-green-600"
-                              : order.status === "in_progress"
-                                ? "bg-blue-600"
-                                : order.status === "assigned"
-                                  ? "bg-yellow-600"
-                                  : "bg-gray-600"
-                          }`}
-                        >
-                          {order.status === "delivered"
-                            ? "Доставлен"
-                            : order.status === "in_progress"
-                              ? "В пути"
-                              : order.status === "assigned"
-                                ? "Назначен"
-                                : "Ожидает"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right font-medium text-gray-900 dark:text-gray-100">
-                        {order.price.toLocaleString("ru-RU")} ₽
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   );

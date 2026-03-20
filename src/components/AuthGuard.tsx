@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@/lib/UserContext';
-import type { UserRole } from '@/types';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useUser } from "@/lib/UserContext";
+import type { UserRole } from "@/types";
 
 interface AuthGuardProps {
   allowedRole: UserRole;
@@ -11,18 +11,27 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
+    if (isLoading) return;
     if (!user) {
-      router.replace('/login');
+      router.replace("/login");
       return;
     }
     if (user.role !== allowedRole) {
       router.replace(`/dashboard/${user.role}`);
     }
-  }, [user, allowedRole, router]);
+  }, [user, isLoading, allowedRole, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-gray-500">Загрузка...</div>
+      </div>
+    );
+  }
 
   if (!user || user.role !== allowedRole) {
     return (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Plus, MapPin, Clock, CheckCircle } from "lucide-react";
+import { Package, Plus, MapPin, Clock, CheckCircle, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +27,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUser } from "@/lib/UserContext";
 import { mockOrders } from "@/lib/mockData";
 
-function getStatusBadge(status: string) {
-  const variants: Record<
+function statusBadge(status: string) {
+  const map: Record<
     string,
     {
       label: string;
@@ -39,34 +39,36 @@ function getStatusBadge(status: string) {
     assigned: { label: "Назначен водитель", variant: "default" },
     in_progress: { label: "В пути", variant: "default" },
     delivered: { label: "Доставлен", variant: "outline" },
-    cancelled: { label: "Отменен", variant: "destructive" },
+    cancelled: { label: "Отменён", variant: "destructive" },
   };
-  return variants[status] ?? variants.pending;
+  return map[status] ?? map.pending;
 }
 
 export function ClientDashboard() {
   const { user } = useUser();
   const router = useRouter();
-  const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
-  const [orders] = useState(mockOrders.filter((o) => o.clientId === user?.id));
+  const [isOpen, setIsOpen] = useState(false);
 
   if (!user) return null;
+
+  // Реальная фильтрация появится после подключения Orders API
+  const orders = mockOrders;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Заголовок */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-gray-900 dark:text-gray-100">Мои заказы</h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Управление и отслеживание заявок на перевозку
+              Добро пожаловать, {user.name}
             </p>
           </div>
-          <Dialog open={isNewOrderOpen} onOpenChange={setIsNewOrderOpen}>
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
               <Button variant="glass_outline">
-                <Plus className="w-4 h-4 mr-2" />
-                Новая заявка
+                <Plus className="w-4 h-4 mr-2" /> Новая заявка
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
@@ -79,46 +81,36 @@ export function ClientDashboard() {
               <div className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="pickup">Адрес отправления</Label>
-                    <Input
-                      id="pickup"
-                      placeholder="Москва, ул. Ленинская, 15"
-                    />
+                    <Label>Адрес отправления</Label>
+                    <Input placeholder="Москва, ул. Ленинская, 15" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="delivery">Адрес доставки</Label>
-                    <Input
-                      id="delivery"
-                      placeholder="Санкт-Петербург, пр. Невский, 28"
-                    />
+                    <Label>Адрес доставки</Label>
+                    <Input placeholder="Санкт-Петербург, пр. Невский, 28" />
                   </div>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="cargo">Тип груза</Label>
-                    <Input id="cargo" placeholder="Электроника" />
+                    <Label>Тип груза</Label>
+                    <Input placeholder="Электроника" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="weight">Вес (кг)</Label>
-                    <Input id="weight" type="number" placeholder="150" />
+                    <Label>Вес (кг)</Label>
+                    <Input type="number" placeholder="150" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Примечания</Label>
+                  <Label>Примечания</Label>
                   <Textarea
-                    id="notes"
                     placeholder="Дополнительная информация о грузе"
                     rows={3}
                   />
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsNewOrderOpen(false)}
-                  >
+                  <Button variant="outline" onClick={() => setIsOpen(false)}>
                     Отмена
                   </Button>
-                  <Button onClick={() => setIsNewOrderOpen(false)}>
+                  <Button onClick={() => setIsOpen(false)}>
                     Создать заявку
                   </Button>
                 </div>
@@ -127,6 +119,27 @@ export function ClientDashboard() {
           </Dialog>
         </div>
 
+        {/* Профиль */}
+        <Card variant="glass">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <User className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  {user.name}
+                </div>
+                <div className="text-sm text-gray-500">{user.email}</div>
+              </div>
+              <Badge variant="outline" className="ml-auto">
+                Клиент
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Статистика */}
         <div className="grid md:grid-cols-3 gap-6">
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -163,6 +176,7 @@ export function ClientDashboard() {
           </Card>
         </div>
 
+        {/* Список заказов */}
         <Card variant="glass">
           <CardHeader>
             <CardTitle>Активные заявки</CardTitle>
@@ -173,12 +187,12 @@ export function ClientDashboard() {
           <CardContent>
             <div className="space-y-4">
               {orders.map((order) => {
-                const badge = getStatusBadge(order.status);
+                const badge = statusBadge(order.status);
                 return (
                   <div
                     key={order.id}
-                    className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer group"
                     onClick={() => router.push(`/dashboard/orders/${order.id}`)}
+                    className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer group"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -208,7 +222,7 @@ export function ClientDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
                       <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                       <div>
                         <p>{order.pickupAddress}</p>
@@ -217,7 +231,7 @@ export function ClientDashboard() {
                       </div>
                     </div>
                     {order.driverName && (
-                      <div className="pt-3 border-t">
+                      <div className="pt-3 border-t mt-3">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           Водитель: {order.driverName}
                         </p>

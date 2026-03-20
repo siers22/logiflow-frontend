@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Package, Truck, AlertCircle } from "lucide-react";
+import { Users, Package, Truck, AlertCircle, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,14 +27,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useUser } from "@/lib/UserContext";
 import { mockOrders, mockDrivers, type Order } from "@/lib/mockData";
 
 export function ManagerDashboard() {
+  const { user } = useUser();
   const [orders, setOrders] = useState(mockOrders);
   const [drivers] = useState(mockDrivers);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState("");
+
+  if (!user) return null;
 
   const pendingOrders = orders.filter((o) => o.status === "pending");
   const activeOrders = orders.filter(
@@ -42,7 +46,7 @@ export function ManagerDashboard() {
   );
   const availableDrivers = drivers.filter((d) => d.status === "available");
 
-  const handleAssignDriver = () => {
+  const handleAssign = () => {
     if (!selectedOrder || !selectedDriverId) return;
     const driver = drivers.find((d) => d.id === selectedDriverId);
     if (!driver) return;
@@ -58,26 +62,48 @@ export function ManagerDashboard() {
           : o,
       ),
     );
-    setIsAssignDialogOpen(false);
+    setIsAssignOpen(false);
     setSelectedOrder(null);
     setSelectedDriverId("");
   };
 
-  const openAssignDialog = (order: Order) => {
+  const openAssign = (order: Order) => {
     setSelectedOrder(order);
-    setIsAssignDialogOpen(true);
+    setIsAssignOpen(true);
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Заголовок */}
         <div>
           <h1 className="text-gray-900 dark:text-gray-100">Панель менеджера</h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Управление заявками и назначение водителей
+            Добро пожаловать, {user.name}
           </p>
         </div>
 
+        {/* Профиль */}
+        <Card variant="glass">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                <User className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  {user.name}
+                </div>
+                <div className="text-sm text-gray-500">{user.email}</div>
+              </div>
+              <Badge variant="outline" className="ml-auto">
+                Менеджер
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Статистика */}
         <div className="grid md:grid-cols-4 gap-6">
           {[
             {
@@ -116,6 +142,7 @@ export function ManagerDashboard() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
+          {/* Новые заявки */}
           <Card variant="glass">
             <CardHeader>
               <CardTitle>Новые заявки</CardTitle>
@@ -148,7 +175,7 @@ export function ManagerDashboard() {
                         {order.pickupAddress} → {order.deliveryAddress}
                       </p>
                       <Button
-                        onClick={() => openAssignDialog(order)}
+                        onClick={() => openAssign(order)}
                         className="w-full"
                         variant="glass_outline_easy"
                       >
@@ -161,6 +188,7 @@ export function ManagerDashboard() {
             </CardContent>
           </Card>
 
+          {/* Свободные водители */}
           <Card variant="glass">
             <CardHeader>
               <CardTitle>Свободные водители</CardTitle>
@@ -198,6 +226,7 @@ export function ManagerDashboard() {
           </Card>
         </div>
 
+        {/* Активные перевозки */}
         <Card variant="glass">
           <CardHeader>
             <CardTitle>Активные перевозки</CardTitle>
@@ -233,17 +262,19 @@ export function ManagerDashboard() {
                       {order.price.toLocaleString("ru-RU")} ₽
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
                     {order.cargoType} • {order.weight} кг
                   </p>
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-xs text-gray-500">
                     {order.pickupAddress} → {order.deliveryAddress}
                   </p>
-                  <div className="pt-3 border-t">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Водитель: {order.driverName}
-                    </p>
-                  </div>
+                  {order.driverName && (
+                    <div className="pt-2 border-t mt-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Водитель: {order.driverName}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -251,7 +282,8 @@ export function ManagerDashboard() {
         </Card>
       </div>
 
-      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+      {/* Диалог назначения */}
+      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Назначить водителя</DialogTitle>
@@ -275,19 +307,18 @@ export function ManagerDashboard() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="driver">Водитель</Label>
+              <Label>Водитель</Label>
               <Select
                 value={selectedDriverId}
                 onValueChange={setSelectedDriverId}
               >
-                <SelectTrigger id="driver">
+                <SelectTrigger>
                   <SelectValue placeholder="Выберите водителя" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableDrivers.map((driver) => (
-                    <SelectItem key={driver.id} value={driver.id}>
-                      {driver.name} — {driver.vehicleType} (
-                      {driver.currentLocation})
+                  {availableDrivers.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} — {d.vehicleType} ({d.currentLocation})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -296,11 +327,11 @@ export function ManagerDashboard() {
             <div className="flex gap-2 justify-end">
               <Button
                 variant="glass_outline_easy"
-                onClick={() => setIsAssignDialogOpen(false)}
+                onClick={() => setIsAssignOpen(false)}
               >
                 Отмена
               </Button>
-              <Button onClick={handleAssignDriver} disabled={!selectedDriverId}>
+              <Button onClick={handleAssign} disabled={!selectedDriverId}>
                 Назначить
               </Button>
             </div>
