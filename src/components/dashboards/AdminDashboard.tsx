@@ -20,7 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Badge, RoleBadge, StatusBadge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -39,17 +39,6 @@ const roleNames: Record<string, string> = {
   driver: "Водитель",
   management: "Руководство",
   admin: "Администратор",
-};
-
-const roleColors: Record<string, string> = {
-  client: "bg-blue-100   text-blue-800   dark:bg-blue-900   dark:text-blue-200",
-  manager:
-    "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  driver:
-    "bg-green-100  text-green-800  dark:bg-green-900  dark:text-green-200",
-  management:
-    "bg-amber-100  text-amber-800  dark:bg-amber-900  dark:text-amber-200",
-  admin: "bg-red-100    text-red-800    dark:bg-red-900    dark:text-red-200",
 };
 
 /** Заглушка для разделов, где API ещё не реализован */
@@ -120,11 +109,7 @@ export function AdminDashboard() {
                   </div>
                 )}
               </div>
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${roleColors.admin}`}
-              >
-                {roleNames.admin}
-              </span>
+              <RoleBadge role={user.role} className="shrink-0" />
             </div>
           </CardContent>
         </Card>
@@ -217,11 +202,7 @@ export function AdminDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleColors[user.role] ?? ""}`}
-                      >
-                        {roleNames[user.role] ?? user.role}
-                      </span>
+                      <RoleBadge role={user.role} />
                       <Badge variant="default">Активен</Badge>
                     </div>
                   </div>
@@ -230,7 +211,7 @@ export function AdminDashboard() {
                 <EmptyState
                   icon={<Users className="w-7 h-7" />}
                   title="Users API ещё не подключён"
-                  description="Полный список пользователей появится после реализации эндпоинта GET /users на бэкенде."
+                  description="."
                 />
               </CardContent>
             </Card>
@@ -249,7 +230,7 @@ export function AdminDashboard() {
                 <EmptyState
                   icon={<ClipboardCheck className="w-7 h-7" />}
                   title="Orders API ещё не подключён"
-                  description="Заказы появятся здесь после реализации эндпоинта GET /orders на бэкенде."
+                  description="."
                 />
               </CardContent>
             </Card>
@@ -266,7 +247,7 @@ export function AdminDashboard() {
                 <EmptyState
                   icon={<Truck className="w-7 h-7" />}
                   title="Drivers API ещё не подключён"
-                  description="Водители появятся здесь после реализации эндпоинта GET /drivers на бэкенде."
+                  description="."
                 />
               </CardContent>
             </Card>

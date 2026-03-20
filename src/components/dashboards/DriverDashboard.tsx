@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { RoleBadge, StatusBadge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -93,9 +93,7 @@ export function DriverDashboard() {
                 </div>
                 <div className="text-sm text-gray-500">{user.email}</div>
               </div>
-              <Badge variant="outline" className="ml-auto">
-                Водитель
-              </Badge>
+              <RoleBadge role={user.role} className="ml-auto" />
             </div>
           </CardContent>
         </Card>
@@ -194,7 +192,7 @@ export function DriverDashboard() {
                       <span className="font-medium text-gray-900 dark:text-gray-100">
                         {activeOrder.id}
                       </span>
-                      <Badge>В пути</Badge>
+                      <StatusBadge status="in_progress" />
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {activeOrder.cargoType} • {activeOrder.weight} кг
@@ -303,7 +301,7 @@ export function DriverDashboard() {
                           {order.cargoType}
                         </p>
                       </div>
-                      <Badge variant="outline">Доставлен</Badge>
+                      <StatusBadge status="delivered" />
                     </div>
                     <p className="text-xs text-gray-500">
                       {new Date(order.updatedAt).toLocaleDateString("ru-RU")}

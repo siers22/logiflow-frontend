@@ -19,7 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { RoleBadge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -109,9 +109,7 @@ export function ManagementDashboard() {
                 </div>
                 <div className="text-sm text-gray-500">{user.email}</div>
               </div>
-              <Badge variant="outline" className="ml-auto">
-                Руководство
-              </Badge>
+              <RoleBadge role={user.role} className="ml-auto" />
             </div>
           </CardContent>
         </Card>

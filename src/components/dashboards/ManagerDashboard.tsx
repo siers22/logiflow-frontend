@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Badge, RoleBadge, StatusBadge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -96,9 +96,7 @@ export function ManagerDashboard() {
                 </div>
                 <div className="text-sm text-gray-500">{user.email}</div>
               </div>
-              <Badge variant="outline" className="ml-auto">
-                Менеджер
-              </Badge>
+              <RoleBadge role={user.role} className="ml-auto" />
             </div>
           </CardContent>
         </Card>
@@ -166,7 +164,7 @@ export function ManagerDashboard() {
                             {order.clientName}
                           </p>
                         </div>
-                        <Badge variant="secondary">Новая</Badge>
+                        <StatusBadge status="pending" />
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {order.cargoType} • {order.weight} кг
@@ -242,17 +240,7 @@ export function ManagerDashboard() {
                         <span className="font-medium text-gray-900 dark:text-gray-100">
                           {order.id}
                         </span>
-                        <Badge
-                          variant={
-                            order.status === "in_progress"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {order.status === "in_progress"
-                            ? "В пути"
-                            : "Назначен"}
-                        </Badge>
+                        <StatusBadge status={order.status} />
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         {order.clientName}

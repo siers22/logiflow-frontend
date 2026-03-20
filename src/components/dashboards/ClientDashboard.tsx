@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { RoleBadge, StatusBadge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -26,23 +26,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useUser } from "@/lib/UserContext";
 import { mockOrders } from "@/lib/mockData";
-
-function statusBadge(status: string) {
-  const map: Record<
-    string,
-    {
-      label: string;
-      variant: "default" | "secondary" | "outline" | "destructive";
-    }
-  > = {
-    pending: { label: "Ожидает", variant: "secondary" },
-    assigned: { label: "Назначен водитель", variant: "default" },
-    in_progress: { label: "В пути", variant: "default" },
-    delivered: { label: "Доставлен", variant: "outline" },
-    cancelled: { label: "Отменён", variant: "destructive" },
-  };
-  return map[status] ?? map.pending;
-}
 
 export function ClientDashboard() {
   const { user } = useUser();
@@ -132,9 +115,7 @@ export function ClientDashboard() {
                 </div>
                 <div className="text-sm text-gray-500">{user.email}</div>
               </div>
-              <Badge variant="outline" className="ml-auto">
-                Клиент
-              </Badge>
+              <RoleBadge role={user.role} className="ml-auto" />
             </div>
           </CardContent>
         </Card>
@@ -187,7 +168,6 @@ export function ClientDashboard() {
           <CardContent>
             <div className="space-y-4">
               {orders.map((order) => {
-                const badge = statusBadge(order.status);
                 return (
                   <div
                     key={order.id}
@@ -200,7 +180,7 @@ export function ClientDashboard() {
                           <span className="font-medium text-gray-900 dark:text-gray-100">
                             {order.id}
                           </span>
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
+                          <StatusBadge status={order.status} />
                           {order.status === "in_progress" && (
                             <span className="text-xs text-blue-600 dark:text-blue-400 group-hover:underline">
                               Отследить →
