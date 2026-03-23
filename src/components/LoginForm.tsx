@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Package, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,53 +21,79 @@ import { ApiError } from "@/lib/api";
 
 type Mode = "login" | "register";
 
+const loginSchema = z.object({
+  email: z.string().min(1, "Введите email"),
+  password: z.string().min(1, "Введите пароль"),
+});
+
+const registerSchema = z
+  .object({
+    fullName: z.string().min(2, "Имя должно содержать минимум 2 символа").max(100),
+    email: z.string().email("Введите корректный email"),
+    password: z
+      .string()
+      .min(8, "Пароль должен содержать минимум 8 символов")
+      .regex(/[A-Z]/, "Пароль должен содержать хотя бы одну заглавную букву")
+      .regex(/[0-9]/, "Пароль должен содержать хотя бы одну цифру"),
+    confirm: z.string(),
+  })
+  .refine((data) => data.password === data.confirm, {
+    message: "Пароли не совпадают",
+    path: ["confirm"],
+  });
+
+type LoginFields = z.infer<typeof loginSchema>;
+type RegisterFields = z.infer<typeof registerSchema>;
+
 export function LoginForm() {
   const { theme, toggleTheme } = useTheme();
   const { login, register } = useUser();
-
   const [mode, setMode] = useState<Mode>("login");
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const loginForm = useForm<LoginFields>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  const registerForm = useForm<RegisterFields>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { fullName: "", email: "", password: "", confirm: "" },
+  });
+
+  const activeForm = mode === "login" ? loginForm : registerForm;
+  const isLoading = activeForm.formState.isSubmitting;
 
   const switchMode = (next: Mode) => {
     setMode(next);
-    setError(null);
-    setFullName("");
-    setEmail("");
-    setPassword("");
-    setConfirm("");
+    setServerError(null);
+    loginForm.reset();
+    registerForm.reset();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (mode === "register" && password !== confirm) {
-      setError("Пароли не совпадают.");
-      return;
-    }
-
-    setIsLoading(true);
+  const onLoginSubmit = async (data: LoginFields) => {
+    setServerError(null);
     try {
-      if (mode === "login") {
-        await login(email, password);
-      } else {
-        // Публичная регистрация — только клиент.
-        // Водителей и менеджеров создаёт администратор.
-        await register(email, password, fullName.trim(), "client");
-      }
+      await login(data.email, data.password);
     } catch (err) {
-      setError(
+      setServerError(
         err instanceof ApiError
           ? err.message
           : "Не удалось подключиться к серверу. Проверьте соединение.",
       );
-    } finally {
-      setIsLoading(false);
+    }
+  };
+
+  const onRegisterSubmit = async (data: RegisterFields) => {
+    setServerError(null);
+    try {
+      await register(data.email, data.password, data.fullName.trim(), "client");
+    } catch (err) {
+      setServerError(
+        err instanceof ApiError
+          ? err.message
+          : "Не удалось подключиться к серверу. Проверьте соединение.",
+      );
     }
   };
 
@@ -129,88 +158,129 @@ export function LoginForm() {
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === "register" && (
+            {mode === "login" ? (
+              <form
+                onSubmit={loginForm.handleSubmit(onLoginSubmit)}
+                className="space-y-4"
+              >
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Полное имя</Label>
+                  <Label htmlFor="login-email">Email</Label>
                   <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="Иван Иванов"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
+                    id="login-email"
+                    type="email"
+                    placeholder="user@example.com"
                     disabled={isLoading}
-                    autoComplete="name"
-                    minLength={2}
+                    autoComplete="email"
+                    {...loginForm.register("email")}
                   />
                 </div>
-              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  autoComplete="email"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Пароль</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                  minLength={8}
-                />
-              </div>
-
-              {mode === "register" && (
                 <div className="space-y-2">
-                  <Label htmlFor="confirm">Подтвердите пароль</Label>
+                  <Label htmlFor="login-password">Пароль</Label>
                   <Input
-                    id="confirm"
+                    id="login-password"
                     type="password"
                     placeholder="••••••••"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    required
                     disabled={isLoading}
-                    autoComplete="new-password"
-                    minLength={8}
+                    autoComplete="current-password"
+                    {...loginForm.register("password")}
                   />
                 </div>
-              )}
 
-              {error && (
-                <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
-                  {error}
+                {serverError && (
+                  <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+                    {serverError}
+                  </div>
+                )}
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Вход..." : "Войти"}
+                </Button>
+              </form>
+            ) : (
+              <form
+                onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="reg-fullName">Полное имя</Label>
+                  <Input
+                    id="reg-fullName"
+                    type="text"
+                    placeholder="Иван Иванов"
+                    disabled={isLoading}
+                    autoComplete="name"
+                    {...registerForm.register("fullName")}
+                  />
+                  {registerForm.formState.errors.fullName && (
+                    <p className="text-xs text-red-500">
+                      {registerForm.formState.errors.fullName.message}
+                    </p>
+                  )}
                 </div>
-              )}
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading
-                  ? mode === "login"
-                    ? "Вход..."
-                    : "Регистрация..."
-                  : mode === "login"
-                    ? "Войти"
-                    : "Зарегистрироваться"}
-              </Button>
-            </form>
+                <div className="space-y-2">
+                  <Label htmlFor="reg-email">Email</Label>
+                  <Input
+                    id="reg-email"
+                    type="email"
+                    placeholder="user@example.com"
+                    disabled={isLoading}
+                    autoComplete="email"
+                    {...registerForm.register("email")}
+                  />
+                  {registerForm.formState.errors.email && (
+                    <p className="text-xs text-red-500">
+                      {registerForm.formState.errors.email.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reg-password">Пароль</Label>
+                  <Input
+                    id="reg-password"
+                    type="password"
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                    {...registerForm.register("password")}
+                  />
+                  {registerForm.formState.errors.password && (
+                    <p className="text-xs text-red-500">
+                      {registerForm.formState.errors.password.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reg-confirm">Подтвердите пароль</Label>
+                  <Input
+                    id="reg-confirm"
+                    type="password"
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                    {...registerForm.register("confirm")}
+                  />
+                  {registerForm.formState.errors.confirm && (
+                    <p className="text-xs text-red-500">
+                      {registerForm.formState.errors.confirm.message}
+                    </p>
+                  )}
+                </div>
+
+                {serverError && (
+                  <div className="rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+                    {serverError}
+                  </div>
+                )}
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Регистрация..." : "Зарегистрироваться"}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       </div>

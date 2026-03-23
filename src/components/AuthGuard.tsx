@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/UserContext";
+import { DashboardSkeleton } from "@/components/DashboardSkeleton";
 import type { UserRole } from "@/types";
 
 interface AuthGuardProps {
@@ -25,20 +26,8 @@ export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
     }
   }, [user, isLoading, allowedRole, router]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-gray-500">Загрузка...</div>
-      </div>
-    );
-  }
-
-  if (!user || user.role !== allowedRole) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-gray-500">Загрузка...</div>
-      </div>
-    );
+  if (isLoading || !user || user.role !== allowedRole) {
+    return <DashboardSkeleton />;
   }
 
   return <>{children}</>;
