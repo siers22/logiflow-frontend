@@ -18,8 +18,20 @@ import {
 import { useTheme } from "@/lib/ThemeContext";
 import { useUser } from "@/lib/UserContext";
 import { ApiError } from "@/lib/api";
+import { BackgroundAnimation } from "@/components/BackgroundAnimation";
 
 type Mode = "login" | "register";
+
+function GlassInput({ className, ...props }: React.ComponentProps<typeof Input>) {
+  return (
+    <div className="rounded-md ring-1 ring-white/50 dark:ring-white/[0.18] focus-within:ring-2 focus-within:ring-blue-400/70 dark:focus-within:ring-blue-400/50 transition-shadow">
+      <Input
+        className={`border-0 bg-white/40 dark:bg-white/[0.08] focus-visible:ring-0 ${className ?? ""}`}
+        {...props}
+      />
+    </div>
+  );
+}
 
 const loginSchema = z.object({
   email: z.string().min(1, "Введите email"),
@@ -98,13 +110,15 @@ export function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
+      <BackgroundAnimation />
+
       <Button
         variant="glass_outline"
         size="default"
         onClick={(e) => toggleTheme(e)}
         title={theme === "dark" ? "Светлая тема" : "Темная тема"}
-        className="absolute top-4 right-4"
+        className="absolute top-4 right-4 z-10"
       >
         {theme === "dark" ? (
           <Sun className="w-5 h-5" />
@@ -113,44 +127,45 @@ export function LoginForm() {
         )}
       </Button>
 
-      <div className="w-full max-w-md z-1">
+      <div className="w-full max-w-md z-10">
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Package className="w-12 h-12 text-blue-600 dark:text-blue-400" />
-            <span className="text-gray-900 dark:text-gray-100 text-3xl font-medium">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <Package className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+            <span className="text-gray-900 dark:text-gray-100 text-3xl font-semibold tracking-tight">
               LogiFlow
             </span>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             Система управления логистикой
           </p>
         </div>
 
         <Card variant="glass">
-          {/* Вкладки */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700">
-            {(["login", "register"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                className={`flex-1 py-3 text-sm font-medium transition-colors
-                  ${
+          {/* Pill-вкладки */}
+          <div className="px-6 pt-5">
+            <div className="bg-black/[0.04] dark:bg-white/[0.05] rounded-xl p-1 flex">
+              {(["login", "register"] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => switchMode(m)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                     mode === m
-                      ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 -mb-px"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                      ? "bg-white dark:bg-white/10 shadow-sm text-gray-900 dark:text-gray-100"
+                      : "text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
                   }`}
-              >
-                {m === "login" ? "Вход" : "Регистрация"}
-              </button>
-            ))}
+                >
+                  {m === "login" ? "Вход" : "Регистрация"}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <CardHeader>
-            <CardTitle>
+          <CardHeader className="pt-4">
+            <CardTitle className="text-gray-900 dark:text-white font-semibold">
               {mode === "login" ? "Добро пожаловать" : "Создать аккаунт"}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-gray-600 dark:text-gray-300">
               {mode === "login"
                 ? "Введите ваш email и пароль"
                 : "Регистрация доступна для клиентов. Водителей и менеджеров добавляет администратор."}
@@ -165,7 +180,7 @@ export function LoginForm() {
               >
                 <div className="space-y-2">
                   <Label htmlFor="login-email">Email</Label>
-                  <Input
+                  <GlassInput
                     id="login-email"
                     type="email"
                     placeholder="user@example.com"
@@ -177,7 +192,7 @@ export function LoginForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="login-password">Пароль</Label>
-                  <Input
+                  <GlassInput
                     id="login-password"
                     type="password"
                     placeholder="••••••••"
@@ -193,7 +208,11 @@ export function LoginForm() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-lg shadow-blue-500/25 font-medium"
+                >
                   {isLoading ? "Вход..." : "Войти"}
                 </Button>
               </form>
@@ -204,7 +223,7 @@ export function LoginForm() {
               >
                 <div className="space-y-2">
                   <Label htmlFor="reg-fullName">Полное имя</Label>
-                  <Input
+                  <GlassInput
                     id="reg-fullName"
                     type="text"
                     placeholder="Иван Иванов"
@@ -221,7 +240,7 @@ export function LoginForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="reg-email">Email</Label>
-                  <Input
+                  <GlassInput
                     id="reg-email"
                     type="email"
                     placeholder="user@example.com"
@@ -238,7 +257,7 @@ export function LoginForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="reg-password">Пароль</Label>
-                  <Input
+                  <GlassInput
                     id="reg-password"
                     type="password"
                     placeholder="••••••••"
@@ -255,7 +274,7 @@ export function LoginForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="reg-confirm">Подтвердите пароль</Label>
-                  <Input
+                  <GlassInput
                     id="reg-confirm"
                     type="password"
                     placeholder="••••••••"
@@ -276,7 +295,11 @@ export function LoginForm() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-lg shadow-blue-500/25 font-medium"
+                >
                   {isLoading ? "Регистрация..." : "Зарегистрироваться"}
                 </Button>
               </form>
