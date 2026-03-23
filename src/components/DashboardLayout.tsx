@@ -1,10 +1,11 @@
 "use client";
 
-import { Package, LogOut, Bell, Moon, Sun } from "lucide-react";
+import { Package, LogOut, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTheme } from "@/lib/ThemeContext";
 import { useUser } from "@/lib/UserContext";
+import { NotificationPanel } from "@/components/NotificationPanel";
 
 const roleNames: Record<string, string> = {
   client: "Клиент",
@@ -61,9 +62,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Moon className="w-5 h-5" />
                 )}
               </Button>
-              <Button variant="glass_outline" size="default">
-                <Bell className="w-5 h-5" />
-              </Button>
+              <NotificationPanel />
               <div className="flex items-center gap-3">
                 <Avatar>
                   <AvatarFallback>{getInitials(user.name)}</AvatarFallback>

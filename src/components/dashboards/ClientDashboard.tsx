@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Plus, MapPin, Clock, CheckCircle, User } from "lucide-react";
+import { Package, Plus, Clock, CheckCircle, User } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -166,54 +166,67 @@ export function ClientDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {orders.map((order) => {
+                const statusAccent =
+                  order.status === "in_progress"
+                    ? "border-l-amber-400"
+                    : order.status === "delivered"
+                      ? "border-l-green-400"
+                      : order.status === "cancelled"
+                        ? "border-l-red-400"
+                        : "border-l-blue-400";
+
                 return (
                   <div
                     key={order.id}
                     onClick={() => router.push(`/dashboard/orders/${order.id}`)}
-                    className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer group"
+                    className={`rounded-xl p-4 bg-white/50 dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] border-l-[3px] ${statusAccent} hover:bg-white/70 dark:hover:bg-white/[0.07] hover:shadow-md transition-all cursor-pointer group`}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
                             {order.id}
                           </span>
                           <StatusBadge status={order.status} />
                           {order.status === "in_progress" && (
-                            <span className="text-xs text-blue-600 dark:text-blue-400 group-hover:underline">
+                            <span className="text-xs text-blue-500 dark:text-blue-400 group-hover:underline">
                               Отследить →
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                           {order.cargoType} • {order.weight} кг
                         </p>
                       </div>
                       <div className="text-right">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">
                           {order.price.toLocaleString("ru-RU")} ₽
                         </div>
-                        <p className="text-xs text-gray-500">
-                          {new Date(order.createdAt).toLocaleDateString(
-                            "ru-RU",
-                          )}
+                        <p className="text-xs text-gray-400">
+                          {new Date(order.createdAt).toLocaleDateString("ru-RU")}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                      <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <div>
+
+                    <div className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-400">
+                      <div className="flex flex-col items-center gap-[3px] mt-1 shrink-0">
+                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
+                        <div className="w-2 h-2 rounded-full bg-green-400" />
+                      </div>
+                      <div className="space-y-1.5">
                         <p>{order.pickupAddress}</p>
-                        <p className="text-gray-400">→</p>
                         <p>{order.deliveryAddress}</p>
                       </div>
                     </div>
+
                     {order.driverName && (
-                      <div className="pt-3 border-t mt-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Водитель: {order.driverName}
+                      <div className="flex items-center gap-2 pt-3 mt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
+                        <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {order.driverName}
                         </p>
                       </div>
                     )}
