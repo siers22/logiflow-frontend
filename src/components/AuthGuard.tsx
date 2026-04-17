@@ -32,3 +32,30 @@ export function AuthGuard({ allowedRole, children }: AuthGuardProps) {
 
   return <>{children}</>;
 }
+
+interface MultiRoleAuthGuardProps {
+  allowedRoles: UserRole[];
+  children: React.ReactNode;
+}
+
+export function MultiRoleAuthGuard({ allowedRoles, children }: MultiRoleAuthGuardProps) {
+  const { user, isLoading } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (!allowedRoles.includes(user.role)) {
+      router.replace(`/dashboard/${user.role}`);
+    }
+  }, [user, isLoading, allowedRoles, router]);
+
+  if (isLoading || !user || !allowedRoles.includes(user.role)) {
+    return <DashboardSkeleton />;
+  }
+
+  return <>{children}</>;
+}

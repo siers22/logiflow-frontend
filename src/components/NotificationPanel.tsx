@@ -1,97 +1,57 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Bell,
-  Truck,
-  CheckCircle,
-  UserCheck,
-  Info,
-  PackageCheck,
-} from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bell, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-
-interface Notification {
-  id: string;
-  type: "order_update" | "driver_assigned" | "delivered" | "system";
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    type: "order_update",
-    title: "Заказ ORD-001 в пути",
-    message: "Водитель Сергей выехал из Москвы и направляется в Санкт-Петербург",
-    time: "5 мин назад",
-    read: false,
-  },
-  {
-    id: "2",
-    type: "driver_assigned",
-    title: "Водитель назначен",
-    message: "На заказ ORD-003 назначен водитель Алексей Петров",
-    time: "1 час назад",
-    read: false,
-  },
-  {
-    id: "3",
-    type: "delivered",
-    title: "Заказ доставлен",
-    message: "Заказ ORD-002 успешно доставлен получателю в Казань",
-    time: "3 часа назад",
-    read: true,
-  },
-  {
-    id: "4",
-    type: "system",
-    title: "Обновление системы",
-    message: "Плановые работы завершены. Все сервисы работают в штатном режиме",
-    time: "Вчера",
-    read: true,
-  },
-];
-
-const notificationIcon: Record<Notification["type"], React.ReactNode> = {
-  order_update: <Truck className="w-4 h-4 text-amber-500" />,
-  driver_assigned: <UserCheck className="w-4 h-4 text-blue-500" />,
-  delivered: <PackageCheck className="w-4 h-4 text-green-500" />,
-  system: <Info className="w-4 h-4 text-gray-400" />,
-};
-
-const notificationIconBg: Record<Notification["type"], string> = {
-  order_update: "bg-amber-100 dark:bg-amber-500/10",
-  driver_assigned: "bg-blue-100 dark:bg-blue-500/10",
-  delivered: "bg-green-100 dark:bg-green-500/10",
-  system: "bg-gray-100 dark:bg-white/[0.05]",
-};
+import { useUser } from "@/lib/UserContext";
+import { api, type Notification } from "@/lib/api";
 
 export function NotificationPanel() {
-  const [notifications, setNotifications] =
-    useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const { withAuth } = useUser();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const load = useCallback(() => {
+    setIsLoading(true);
+    withAuth((token) => api.notifications.list(token))
+      .then(setNotifications)
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, [withAuth]);
 
-  function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   function markRead(id: string) {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-    );
+    withAuth((token) => api.notifications.markRead(token, id))
+      .then(() =>
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+        ),
+      )
+      .catch(() => {});
+  }
+
+  function markAllRead() {
+    const unread = notifications.filter((n) => !n.isRead);
+    unread.forEach((n) => markRead(n.id));
   }
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div className="relative inline-flex cursor-pointer">
           <Button variant="glass_outline" size="default">
@@ -135,7 +95,11 @@ export function NotificationPanel() {
 
           {/* Список */}
           <div className="max-h-[380px] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.15)_transparent] dark:[scrollbar-color:rgba(255,255,255,0.1)_transparent]">
-            {notifications.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-10 text-gray-400 text-sm">
+                Загрузка...
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                 <Bell className="w-8 h-8 mb-2 opacity-30" />
                 <p className="text-sm">Нет уведомлений</p>
@@ -144,32 +108,32 @@ export function NotificationPanel() {
               notifications.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => markRead(n.id)}
+                  onClick={() => !n.isRead && markRead(n.id)}
                   className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04] border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 ${
-                    !n.read ? "bg-blue-50/50 dark:bg-blue-500/[0.05]" : ""
+                    !n.isRead ? "bg-blue-50/50 dark:bg-blue-500/[0.05]" : ""
                   }`}
                 >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${notificationIconBg[n.type]}`}
-                  >
-                    {notificationIcon[n.type]}
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gray-100 dark:bg-white/[0.05]">
+                    <Info className="w-4 h-4 text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p
-                        className={`text-sm leading-snug ${!n.read ? "font-semibold text-gray-900 dark:text-gray-100" : "font-medium text-gray-700 dark:text-gray-300"}`}
+                        className={`text-sm leading-snug ${!n.isRead ? "font-semibold text-gray-900 dark:text-gray-100" : "font-medium text-gray-700 dark:text-gray-300"}`}
                       >
                         {n.title}
                       </p>
-                      {!n.read && (
+                      {!n.isRead && (
                         <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1" />
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                      {n.message}
-                    </p>
+                    {n.body && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                        {n.body}
+                      </p>
+                    )}
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                      {n.time}
+                      {new Date(n.createdAt).toLocaleString("ru-RU")}
                     </p>
                   </div>
                 </button>
@@ -180,7 +144,7 @@ export function NotificationPanel() {
           {/* Футер */}
           <div className="px-4 py-2.5 border-t border-black/[0.06] dark:border-white/[0.06]">
             <p className="text-[11px] text-center text-gray-400 dark:text-gray-500">
-              История уведомлений появится после подключения API
+              Уведомления загружаются с сервера
             </p>
           </div>
         </div>

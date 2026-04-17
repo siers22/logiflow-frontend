@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Users, Package, Truck, AlertCircle, User } from "lucide-react";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,43 +30,74 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/lib/UserContext";
-import { mockOrders, mockDrivers, type Order } from "@/lib/mockData";
+import { api, type Driver, type Order } from "@/lib/api";
+
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase();
+}
 
 export function ManagerDashboard() {
-  const { user } = useUser();
-  const [orders, setOrders] = useState(mockOrders);
-  const [drivers] = useState(mockDrivers);
+  const { user, withAuth } = useUser();
+  const router = useRouter();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  const loadData = useCallback(() => {
+    setIsLoading(true);
+    Promise.all([
+      withAuth((token) => api.orders.list(token)),
+      withAuth((token) => api.drivers.list(token)),
+    ])
+      .then(([ordersRes, driversRes]) => {
+        setOrders(ordersRes);
+        setDrivers(driversRes);
+      })
+      .catch((err: Error) => toast.error(err.message ?? "Не удалось загрузить данные"))
+      .finally(() => setIsLoading(false));
+  }, [withAuth]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   if (!user) return null;
 
   const pendingOrders = orders.filter((o) => o.status === "pending");
   const activeOrders = orders.filter(
-    (o) => o.status === "assigned" || o.status === "in_progress",
+    (o) => o.status === "assigned" || o.status === "in_transit",
   );
   const availableDrivers = drivers.filter((d) => d.status === "available");
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!selectedOrder || !selectedDriverId) return;
-    const driver = drivers.find((d) => d.id === selectedDriverId);
-    if (!driver) return;
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === selectedOrder.id
-          ? {
-              ...o,
-              status: "assigned" as const,
-              driverId: driver.id,
-              driverName: driver.name,
-            }
-          : o,
-      ),
-    );
-    setIsAssignOpen(false);
-    setSelectedOrder(null);
-    setSelectedDriverId("");
+    setIsAssigning(true);
+    try {
+      const updated = await withAuth((token) =>
+        api.orders.updateStatus(token, selectedOrder.id, {
+          status: "assigned",
+          driverId: selectedDriverId,
+        }),
+      );
+      setOrders((prev) =>
+        prev.map((o) => (o.id === selectedOrder.id ? updated ?? { ...o, status: "assigned", driverId: selectedDriverId } : o)),
+      );
+      setDrivers((prev) =>
+        prev.map((d) => (d.id === selectedDriverId ? { ...d, status: "on_route" } : d)),
+      );
+      toast.success("Водитель назначен");
+      setIsAssignOpen(false);
+      setSelectedOrder(null);
+      setSelectedDriverId("");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Не удалось назначить водителя");
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const openAssign = (order: Order) => {
@@ -132,7 +165,7 @@ export function ManagerDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {stat.value}
+                  {isLoading ? "—" : stat.value}
                 </div>
               </CardContent>
             </Card>
@@ -148,37 +181,52 @@ export function ManagerDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {pendingOrders.length === 0 ? (
+                {isLoading ? (
+                  <p className="text-gray-400 text-center py-4 text-sm">Загрузка...</p>
+                ) : pendingOrders.length === 0 ? (
                   <p className="text-gray-500 text-center py-4">
                     Нет новых заявок
                   </p>
                 ) : (
                   pendingOrders.map((order) => (
-                    <div key={order.id} className="border rounded-lg p-4">
+                    <div
+                      key={order.id}
+                      className="border rounded-lg p-4"
+                    >
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-                            {order.id}
+                          <div
+                            className="font-medium text-gray-900 dark:text-gray-100 mb-1 cursor-pointer hover:underline"
+                            onClick={() => router.push(`/dashboard/orders/${order.id}`)}
+                          >
+                            #{shortId(order.id)}
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {order.clientName}
+                            {new Date(order.createdAt).toLocaleString("ru-RU")}
                           </p>
                         </div>
                         <StatusBadge status="pending" />
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {order.cargoType} • {order.weight} кг
+                        {order.cargoDescription ?? "Без описания"}
+                        {order.weightKg ? ` • ${order.weightKg} кг` : ""}
                       </p>
                       <p className="text-xs text-gray-500 mb-3">
-                        {order.pickupAddress} → {order.deliveryAddress}
+                        {(order.originAddress ?? "Со склада")} → {order.destinationAddress}
                       </p>
-                      <Button
-                        onClick={() => openAssign(order)}
-                        className="w-full"
-                        variant="glass_outline_easy"
-                      >
-                        Назначить водителя
-                      </Button>
+                      {availableDrivers.length === 0 ? (
+                        <p className="text-xs text-center text-gray-400 py-1">
+                          Нет свободных водителей
+                        </p>
+                      ) : (
+                        <Button
+                          onClick={() => openAssign(order)}
+                          className="w-full"
+                          variant="glass_outline_easy"
+                        >
+                          Назначить водителя
+                        </Button>
+                      )}
                     </div>
                   ))
                 )}
@@ -194,7 +242,9 @@ export function ManagerDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {availableDrivers.length === 0 ? (
+                {isLoading ? (
+                  <p className="text-gray-400 text-center py-4 text-sm">Загрузка...</p>
+                ) : availableDrivers.length === 0 ? (
                   <p className="text-gray-500 text-center py-4">
                     Нет свободных водителей
                   </p>
@@ -204,17 +254,19 @@ export function ManagerDashboard() {
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-                            {driver.name}
+                            ID: {shortId(driver.id)}
                           </div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {driver.vehicleType} • {driver.vehicleNumber}
+                            {driver.licenseNumber}
                           </p>
                         </div>
                         <Badge>Доступен</Badge>
                       </div>
                       <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                        <span>📍 {driver.currentLocation}</span>
-                        <span>⭐ {driver.rating}</span>
+                        <span>
+                          {driver.vehicleId ? "ТС привязано" : "Без ТС"}
+                        </span>
+                        <span>⭐ {driver.rating.toFixed(1)}</span>
                       </div>
                     </div>
                   ))
@@ -232,39 +284,52 @@ export function ManagerDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {activeOrders.map((order) => (
-                <div key={order.id} className="border rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {order.id}
-                        </span>
-                        <StatusBadge status={order.status} />
+              {isLoading ? (
+                <p className="text-gray-400 text-center py-4 text-sm">Загрузка...</p>
+              ) : activeOrders.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">Нет активных перевозок</p>
+              ) : (
+                activeOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    onClick={() => router.push(`/dashboard/orders/${order.id}`)}
+                    className="border rounded-lg p-4 cursor-pointer hover:bg-white/70 dark:hover:bg-white/[0.06] transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            #{shortId(order.id)}
+                          </span>
+                          <StatusBadge status={order.status} />
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {new Date(order.createdAt).toLocaleString("ru-RU")}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {order.clientName}
-                      </p>
+                      {order.totalPrice != null && (
+                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                          {order.totalPrice.toLocaleString("ru-RU")} ₽
+                        </div>
+                      )}
                     </div>
-                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                      {order.price.toLocaleString("ru-RU")} ₽
-                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                      {order.cargoDescription ?? "Без описания"}
+                      {order.weightKg ? ` • ${order.weightKg} кг` : ""}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {(order.originAddress ?? "Со склада")} → {order.destinationAddress}
+                    </p>
+                    {order.driverId && (
+                      <div className="pt-2 border-t mt-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Водитель: #{shortId(order.driverId)}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                    {order.cargoType} • {order.weight} кг
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {order.pickupAddress} → {order.deliveryAddress}
-                  </p>
-                  {order.driverName && (
-                    <div className="pt-2 border-t mt-2">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Водитель: {order.driverName}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -276,21 +341,21 @@ export function ManagerDashboard() {
           <DialogHeader>
             <DialogTitle>Назначить водителя</DialogTitle>
             <DialogDescription>
-              Выберите водителя для заявки {selectedOrder?.id}
+              {selectedOrder && `Заявка #${shortId(selectedOrder.id)}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {selectedOrder && (
               <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                 <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-                  {selectedOrder.cargoType}
+                  {selectedOrder.cargoDescription ?? "Без описания"}
                 </p>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {selectedOrder.weight} кг • {selectedOrder.distance} км
+                  {selectedOrder.weightKg != null && `${selectedOrder.weightKg} кг`}
+                  {selectedOrder.volumeM3 != null && ` • ${selectedOrder.volumeM3} м³`}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
-                  {selectedOrder.pickupAddress} →{" "}
-                  {selectedOrder.deliveryAddress}
+                  {(selectedOrder.originAddress ?? "Со склада")} → {selectedOrder.destinationAddress}
                 </p>
               </div>
             )}
@@ -306,7 +371,7 @@ export function ManagerDashboard() {
                 <SelectContent>
                   {availableDrivers.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.name} — {d.vehicleType} ({d.currentLocation})
+                      {d.licenseNumber} — ⭐ {d.rating.toFixed(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -319,8 +384,8 @@ export function ManagerDashboard() {
               >
                 Отмена
               </Button>
-              <Button onClick={handleAssign} disabled={!selectedDriverId}>
-                Назначить
+              <Button onClick={handleAssign} disabled={!selectedDriverId || isAssigning}>
+                {isAssigning ? "Назначение..." : "Назначить"}
               </Button>
             </div>
           </div>
