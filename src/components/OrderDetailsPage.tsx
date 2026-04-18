@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUser } from "@/lib/UserContext";
-import { api, ApiError, type Order, type Route } from "@/lib/api";
+import { api, ApiError, type Order, type Route, type Driver } from "@/lib/api";
 import { RouteMap } from "@/components/RouteMap";
 
 function getDeliveryProgress(status: Order["status"]): number {
@@ -56,12 +56,23 @@ export function OrderDetailsPage({ orderId }: OrderDetailsPageProps) {
   const [isCancelling, setIsCancelling] = useState(false);
   const [route, setRoute] = useState<Route | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [driver, setDriver] = useState<Driver | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setIsLoading(true);
     withAuth((token) => api.orders.get(token, orderId))
-      .then((o) => setOrder(o))
+      .then((o) => {
+        setOrder(o);
+        if (o.driverId) {
+          withAuth((token) => api.drivers.list(token))
+            .then((list) => {
+              const found = list.find((d) => d.id === o.driverId);
+              if (found) setDriver(found);
+            })
+            .catch(() => {});
+        }
+      })
       .catch((err: unknown) => {
         if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
           setNotFound(true);
@@ -308,14 +319,37 @@ export function OrderDetailsPage({ orderId }: OrderDetailsPageProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-start gap-3">
-                    <User className="w-5 h-5 text-gray-600 mt-0.5" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        ID: {shortId(order.driverId)}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Полная карточка водителя появится после расширения API
-                      </div>
+                    <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {driver ? (
+                        <>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            @{driver.slug}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {driver.licenseNumber}
+                          </div>
+                          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                            <span>⭐ {driver.rating.toFixed(1)}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-medium ${
+                              driver.status === "available"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                : driver.status === "on_route"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                            }`}>
+                              {driver.status === "available" ? "Доступен" :
+                               driver.status === "on_route" ? "В пути" : "Не на смене"}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-gray-500">
+                          ID: {shortId(order.driverId)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>

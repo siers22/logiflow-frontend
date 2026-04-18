@@ -586,8 +586,13 @@ export const api = {
       const ws = new WebSocket(`${wsBase}/api/orders/${orderId}/route/ws`, [accessToken]);
       ws.onmessage = (e) => {
         try {
-          const pos = JSON.parse(e.data) as RoutePosition;
-          onPosition(pos);
+          const raw = JSON.parse(e.data);
+          // Backend sends snake_case: { current_index, coordinate }
+          const currentIndex = raw.current_index ?? raw.CurrentIndex ?? raw.currentIndex;
+          const coordinate = raw.coordinate ?? raw.Coordinate;
+          if (currentIndex != null) {
+            onPosition({ currentIndex, coordinate });
+          }
         } catch {}
       };
       return ws;

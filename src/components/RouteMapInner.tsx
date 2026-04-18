@@ -46,14 +46,19 @@ export function RouteMapInner({ coordinates, currentIndex }: Props) {
       />
       <FitBounds coordinates={coordinates} />
 
+      {/* Весь маршрут (серая подложка) */}
+      {latLngs.length >= 2 && (
+        <Polyline positions={latLngs} color="#475569" weight={4} opacity={0.5} />
+      )}
+
       {/* Пройденный маршрут */}
       {passedLatLngs.length >= 2 && (
-        <Polyline positions={passedLatLngs} color="#3b82f6" weight={4} opacity={0.9} />
+        <Polyline positions={passedLatLngs} color="#3b82f6" weight={5} opacity={0.95} />
       )}
 
       {/* Оставшийся маршрут */}
       {remainingLatLngs.length >= 2 && (
-        <Polyline positions={remainingLatLngs} color="#94a3b8" weight={3} opacity={0.6} dashArray="8 6" />
+        <Polyline positions={remainingLatLngs} color="#64748b" weight={4} opacity={0.75} dashArray="10 6" />
       )}
 
       {/* Старт */}

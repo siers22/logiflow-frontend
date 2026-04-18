@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MapPin, Package, Settings, User, IdCard, Car } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/lib/UserContext";
-import { api, type Driver, type DriverStatus, type Order } from "@/lib/api";
+import { api, type Driver, type DriverStatus, type Order, type Route, type Vehicle } from "@/lib/api";
+import { RouteMap } from "@/components/RouteMap";
 
 const statusColors: Record<DriverStatus, string> = {
   available: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
@@ -43,8 +44,21 @@ export function DriverDashboard() {
   const { user, withAuth } = useUser();
   const [driver, setDriver] = useState<Driver | null>(null);
   const [driverStatus, setDriverStatus] = useState<DriverStatus>("off_duty");
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [route, setRoute] = useState<Route | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const loadVehicle = useCallback((vehicleId: string) => {
+    withAuth((token) => api.vehicles.list(token))
+      .then((list) => {
+        const found = list.find((v) => v.id === vehicleId);
+        if (found) setVehicle(found);
+      })
+      .catch(() => {});
+  }, [withAuth]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -52,6 +66,7 @@ export function DriverDashboard() {
       .then((d) => {
         setDriver(d);
         setDriverStatus(d.status);
+        if (d.vehicleId) loadVehicle(d.vehicleId);
       })
       .catch(() =>
         withAuth((token) => api.drivers.list(token))
@@ -60,6 +75,7 @@ export function DriverDashboard() {
             if (mine) {
               setDriver(mine);
               setDriverStatus(mine.status);
+              if (mine.vehicleId) loadVehicle(mine.vehicleId);
             }
           })
           .catch(() => {}),
@@ -78,6 +94,40 @@ export function DriverDashboard() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  const activeOrder = orders.find(
+    (o) => o.status === "in_transit" || o.status === "assigned",
+  );
+
+  // Загружаем маршрут и подключаем WebSocket для активного заказа
+  useEffect(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setRoute(null);
+    setCurrentIndex(0);
+
+    if (!activeOrder) return;
+
+    withAuth((token) => api.routes.get(token, activeOrder.id))
+      .then((r) => {
+        setRoute(r);
+        setCurrentIndex(r.currentIndex);
+      })
+      .catch(() => {});
+
+    let ws: WebSocket | null = null;
+    withAuth(async (token) => {
+      ws = api.routes.connectWs(activeOrder.id, token, (pos) => {
+        setCurrentIndex(pos.currentIndex);
+      });
+      wsRef.current = ws;
+    }).catch(() => {});
+
+    return () => {
+      ws?.close();
+      wsRef.current = null;
+    };
+  }, [activeOrder?.id, activeOrder?.status, withAuth]);
 
   const handleStatusChange = async (newStatus: DriverStatus) => {
     const prev = driverStatus;
@@ -100,17 +150,36 @@ export function DriverDashboard() {
       setOrders((prev) =>
         prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "delivered" } : o)),
       );
+      // Автоматически переводим водителя в "доступен"
+      await withAuth((token) => api.drivers.updateMyStatus(token, "available")).catch(() => {});
+      setDriverStatus("available");
+      if (driver) setDriver({ ...driver, status: "available" });
       toast.success("Доставка завершена");
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Не удалось завершить доставку");
     }
   };
 
+  const handleStartDelivery = async (order: Order) => {
+    try {
+      const updated = await withAuth((token) =>
+        api.orders.updateStatus(token, order.id, { status: "in_transit" }),
+      );
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "in_transit" } : o)),
+      );
+      // Автоматически переводим водителя в "в пути"
+      await withAuth((token) => api.drivers.updateMyStatus(token, "on_route")).catch(() => {});
+      setDriverStatus("on_route");
+      if (driver) setDriver({ ...driver, status: "on_route" });
+      toast.success("Доставка начата");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Не удалось обновить статус");
+    }
+  };
+
   if (!user) return null;
 
-  const activeOrder = orders.find(
-    (o) => o.status === "in_transit" || o.status === "assigned",
-  );
   const completedOrders = orders.filter((o) => o.status === "delivered");
 
   return (
@@ -182,13 +251,30 @@ export function DriverDashboard() {
               <Car className="w-4 h-4 text-gray-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {driver
-                  ? driver.vehicleId
-                    ? "ТС привязано"
-                    : "Нет ТС"
-                  : "—"}
-              </div>
+              {vehicle ? (
+                <>
+                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                    {vehicle.plateNumber}
+                  </div>
+                  {(vehicle.brand || vehicle.model) && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {[vehicle.brand, vehicle.model].filter(Boolean).join(" ")}
+                      {vehicle.year ? ` (${vehicle.year})` : ""}
+                    </div>
+                  )}
+                  {(vehicle.capacityKg || vehicle.capacityM3) && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      {vehicle.capacityKg ? `${vehicle.capacityKg} кг` : ""}
+                      {vehicle.capacityKg && vehicle.capacityM3 ? " • " : ""}
+                      {vehicle.capacityM3 ? `${vehicle.capacityM3} м³` : ""}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {driver ? (driver.vehicleId ? "Загрузка..." : "Нет ТС") : "—"}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -271,16 +357,39 @@ export function DriverDashboard() {
                     </div>
                   </div>
                 </div>
-                {activeOrder.status === "in_transit" && (
-                  <div className="pt-4 border-t">
+
+                {route && route.coordinates.length >= 2 ? (
+                  <div>
+                    <RouteMap coordinates={route.coordinates} currentIndex={currentIndex} />
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                      <span>📏 {route.distanceKm.toFixed(1)} км</span>
+                      <span>⏱ {Math.round(route.durationSec / 60)} мин</span>
+                      {activeOrder.status === "in_transit" && (
+                        <span className="text-blue-500 dark:text-blue-400 animate-pulse">● Live</span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="pt-4 border-t flex gap-2">
+                  {activeOrder.status === "assigned" && (
                     <Button
-                      className="w-full"
+                      className="flex-1"
+                      variant="glass_outline_easy"
+                      onClick={() => handleStartDelivery(activeOrder)}
+                    >
+                      Начать доставку
+                    </Button>
+                  )}
+                  {activeOrder.status === "in_transit" && (
+                    <Button
+                      className="flex-1"
                       onClick={() => handleCompleteDelivery(activeOrder)}
                     >
                       Завершить доставку
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
