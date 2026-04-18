@@ -25,8 +25,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { useUser } from "@/lib/UserContext";
-import { api, type Order, type OrderCreate } from "@/lib/api";
+import { api, ApiError, type Order, type OrderCreate } from "@/lib/api";
 
 function orderShortId(id: string) {
   return id.slice(0, 8).toUpperCase();
@@ -71,7 +72,11 @@ export function ClientDashboard() {
       setForm({});
       toast.success("Заявка создана");
     } catch (err: unknown) {
-      toast.error((err as Error).message ?? "Не удалось создать заявку");
+      if (err instanceof ApiError && err.status >= 500) {
+        toast.error("Не удалось создать заявку — проверьте правильность введённых адресов");
+      } else {
+        toast.error((err as Error).message ?? "Не удалось создать заявку");
+      }
     } finally {
       setIsCreating(false);
     }
@@ -112,21 +117,21 @@ export function ClientDashboard() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Адрес отправления</Label>
-                    <Input
+                    <AddressAutocomplete
                       placeholder="Москва, ул. Ленинская, 15"
                       value={form.originAddress ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, originAddress: e.target.value || null }))
+                      onChange={(v) =>
+                        setForm((f) => ({ ...f, originAddress: v || null }))
                       }
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Адрес доставки *</Label>
-                    <Input
+                    <AddressAutocomplete
                       placeholder="Санкт-Петербург, пр. Невский, 28"
                       value={form.destinationAddress ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, destinationAddress: e.target.value }))
+                      onChange={(v) =>
+                        setForm((f) => ({ ...f, destinationAddress: v }))
                       }
                     />
                   </div>

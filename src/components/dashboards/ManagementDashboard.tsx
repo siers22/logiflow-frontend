@@ -3,11 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
+  TrendingDown,
   DollarSign,
   Package,
   Users,
   Calendar,
   User,
+  RussianRubleIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -68,7 +70,10 @@ function buildChartData(orders: Order[]) {
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-12)
     .map(([date, v]) => ({
-      month: new Date(date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }),
+      month: new Date(date).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "short",
+      }),
       ...v,
     }));
 }
@@ -94,12 +99,15 @@ export function ManagementDashboard() {
       .then(([ordersRes, driversRes]) => {
         // фильтруем заявки по выбранному периоду на клиенте
         const filtered = ordersRes.filter(
-          (o) => o.createdAt >= range.from && o.createdAt <= range.to + "T23:59:59",
+          (o) =>
+            o.createdAt >= range.from && o.createdAt <= range.to + "T23:59:59",
         );
         setOrders(filtered);
         setDrivers(driversRes);
       })
-      .catch((err: Error) => toast.error(err.message ?? "Не удалось загрузить данные"))
+      .catch((err: Error) =>
+        toast.error(err.message ?? "Не удалось загрузить данные"),
+      )
       .finally(() => setIsLoading(false));
   }, [withAuth, period]);
 
@@ -114,7 +122,9 @@ export function ManagementDashboard() {
   const activeOrders = orders.filter(
     (o) => o.status === "in_transit" || o.status === "assigned",
   ).length;
-  const availableDrivers = drivers.filter((d) => d.status === "available").length;
+  const availableDrivers = drivers.filter(
+    (d) => d.status === "available",
+  ).length;
 
   const statusData = [
     { name: "Доставлено", value: completedOrders, color: "#10b981" },
@@ -142,7 +152,9 @@ export function ManagementDashboard() {
   });
   const topDrivers = drivers
     .filter((d) => driverOrderCount[d.id])
-    .sort((a, b) => (driverOrderCount[b.id] ?? 0) - (driverOrderCount[a.id] ?? 0))
+    .sort(
+      (a, b) => (driverOrderCount[b.id] ?? 0) - (driverOrderCount[a.id] ?? 0),
+    )
     .slice(0, 5);
 
   return (
@@ -183,15 +195,20 @@ export function ManagementDashboard() {
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Выручка</CardTitle>
-              <DollarSign className="w-4 h-4 text-green-600" />
+              <RussianRubleIcon className={`w-4 h-4 ${!isLoading && totalRevenue < 0 ? "text-red-500" : "text-green-600"}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <div className={`text-2xl font-bold ${!isLoading && totalRevenue < 0 ? "text-red-500" : "text-gray-900 dark:text-gray-100"}`}>
                 {isLoading ? "—" : totalRevenue.toLocaleString("ru-RU") + " ₽"}
               </div>
               {!isLoading && totalRevenue > 0 && (
                 <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
                   <TrendingUp className="w-3 h-3" /> За выбранный период
+                </p>
+              )}
+              {!isLoading && totalRevenue < 0 && (
+                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                  <TrendingDown className="w-3 h-3" /> Убыток за период
                 </p>
               )}
             </CardContent>
@@ -250,7 +267,10 @@ export function ManagementDashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-600" />
-                <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
+                <Select
+                  value={period}
+                  onValueChange={(v) => setPeriod(v as Period)}
+                >
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -348,11 +368,15 @@ export function ManagementDashboard() {
           <Card variant="glass">
             <CardHeader>
               <CardTitle>Топ водителей</CardTitle>
-              <CardDescription>По доставленным заказам за период</CardDescription>
+              <CardDescription>
+                По доставленным заказам за период
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p className="text-gray-400 text-sm text-center py-4">Загрузка...</p>
+                <p className="text-gray-400 text-sm text-center py-4">
+                  Загрузка...
+                </p>
               ) : topDrivers.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-4">
                   Нет данных за период
