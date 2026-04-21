@@ -2,10 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import photo from "@/pictures/images.png";
+import photo1 from "@/pictures/images.png";
+import photo2 from "@/pictures/Black_Sun.svg";
+
+const PHOTOS = [photo1, photo2];
 
 export function SpinningPhotoOverlay() {
   const [visible, setVisible] = useState(false);
+  const [index, setIndex] = useState(0);
   const pressed = useRef(new Set<string>());
 
   useEffect(() => {
@@ -18,6 +22,19 @@ export function SpinningPhotoOverlay() {
 
       if (isCombo && !wasCombo) {
         setVisible((v) => !v);
+        return;
+      }
+
+      if (!visible) return;
+
+      if (e.code === "ArrowUp" || e.code === "ArrowRight") {
+        e.preventDefault();
+        setIndex((i) => (i + 1) % PHOTOS.length);
+      } else if (e.code === "ArrowDown" || e.code === "ArrowLeft") {
+        e.preventDefault();
+        setIndex((i) => (i - 1 + PHOTOS.length) % PHOTOS.length);
+      } else if (e.code === "Escape") {
+        setVisible(false);
       }
     };
 
@@ -31,7 +48,7 @@ export function SpinningPhotoOverlay() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [visible]);
 
   return (
     <div
@@ -52,7 +69,7 @@ export function SpinningPhotoOverlay() {
       }}
     >
       <Image
-        src={photo}
+        src={PHOTOS[index]}
         alt="spinning"
         style={{
           width: "min(60vw, 60vh)",
