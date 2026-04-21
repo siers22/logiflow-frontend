@@ -3,7 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { UserProvider } from "@/lib/UserContext";
 import { Toaster } from "@/components/ui/sonner";
-import { BackgroundAnimation } from "@/components/BackgroundAnimation"; // <-- добавь импорт
+import { BackgroundAnimation } from "@/components/BackgroundAnimation";
+import { SpinningPhotoOverlay } from "@/components/SpinningPhotoOverlay";
 
 export const metadata: Metadata = {
   title: "LogiFlow — Система управления логистикой",
@@ -19,6 +20,7 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <body>
         {/*<BackgroundAnimation />*/}
+        <SpinningPhotoOverlay />
         <ThemeProvider>
           <UserProvider>
             {children}
