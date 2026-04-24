@@ -4,13 +4,13 @@
 
 ## Технологии
 
-| Было (Vite SPA)          | Стало (Next.js 15)                      |
-|--------------------------|------------------------------------------|
-| `App.tsx` — useState роутер | App Router — файловая система `/app` |
-| Единый `User` state      | `UserContext` + `localStorage`           |
-| `onLogout` prop drilling | `useUser()` hook везде                   |
-| `selectedOrder` в state  | URL `/dashboard/orders/[id]`             |
-| Нет SSR                  | Server Components + Client Components    |
+
+------------------------------------------|
+| App Router — файловая система `/app` |
+| `UserContext` + `localStorage`           |
+| `useUser()` hook везде                   |
+| URL `/dashboard/orders/[id]`             |
+| Server Components + Client Components    |
 
 ## Структура проекта
 
