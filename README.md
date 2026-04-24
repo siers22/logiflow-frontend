@@ -2,15 +2,6 @@
 
 Курсовой проект **LogiFlow** — веб-приложение для управления логистикой, переписанное с Vite/React SPA на **Next.js 15 App Router** + TypeScript.
 
-## Технологии
-
-
-------------------------------------------|
-| App Router — файловая система `/app` |
-| `UserContext` + `localStorage`           |
-| `useUser()` hook везде                   |
-| URL `/dashboard/orders/[id]`             |
-| Server Components + Client Components    |
 
 ## Структура проекта
 
