@@ -118,6 +118,11 @@ const statusConfig: Record<
     label: "Назначен водитель",
     icon: <UserCheck />,
   },
+  in_transit: {
+    variant: "statusInProgress",
+    label: "В пути",
+    icon: <Truck />,
+  },
   in_progress: {
     variant: "statusInProgress",
     label: "В пути",

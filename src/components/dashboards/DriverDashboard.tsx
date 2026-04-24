@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { MapPin, Package, MessageSquare, Settings, User } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { MapPin, Package, Settings, User, IdCard, Car } from "lucide-react";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,45 +21,166 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useUser } from "@/lib/UserContext";
-import {
-  mockOrders,
-  mockDrivers,
-  mockMessages,
-  type DriverStatus,
-} from "@/lib/mockData";
+import { api, type Driver, type DriverStatus, type Order, type Route, type Vehicle } from "@/lib/api";
+import { RouteMap } from "@/components/RouteMap";
 
 const statusColors: Record<DriverStatus, string> = {
-  available:
-    "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  busy: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  offline: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+  available: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  on_route: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  off_duty: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
 };
 const statusLabels: Record<DriverStatus, string> = {
   available: "Доступен",
-  busy: "Занят",
-  offline: "Не в сети",
+  on_route: "В пути",
+  off_duty: "Не на смене",
 };
 
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase();
+}
+
 export function DriverDashboard() {
-  const { user } = useUser();
+  const { user, withAuth } = useUser();
+  const [driver, setDriver] = useState<Driver | null>(null);
+  const [driverStatus, setDriverStatus] = useState<DriverStatus>("off_duty");
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [route, setRoute] = useState<Route | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // Шаблон данных водителя — будет заменён на GET /me/driver после подключения Driver API
-  const driverTemplate = mockDrivers[0];
-  const [driverStatus, setDriverStatus] = useState<DriverStatus>(
-    driverTemplate.status,
-  );
-  const [newMessage, setNewMessage] = useState("");
+  const loadVehicle = useCallback((vehicleId: string) => {
+    withAuth((token) => api.vehicles.list(token))
+      .then((list) => {
+        const found = list.find((v) => v.id === vehicleId);
+        if (found) setVehicle(found);
+      })
+      .catch(() => {});
+  }, [withAuth]);
 
-  // Показываем заказы с назначенным водителем как пример активных рейсов
-  const activeOrders = mockOrders.filter(
-    (o) => o.status === "in_progress" && o.driverId,
+  useEffect(() => {
+    if (!user?.id) return;
+    withAuth((token) => api.drivers.get(token, user.slug ?? user.id))
+      .then((d) => {
+        setDriver(d);
+        setDriverStatus(d.status);
+        if (d.vehicleId) loadVehicle(d.vehicleId);
+      })
+      .catch(() =>
+        withAuth((token) => api.drivers.list(token))
+          .then((list) => {
+            const mine = list.find((d) => d.userId === user.id);
+            if (mine) {
+              setDriver(mine);
+              setDriverStatus(mine.status);
+              if (mine.vehicleId) loadVehicle(mine.vehicleId);
+            }
+          })
+          .catch(() => {}),
+      );
+  }, [user?.id, user?.slug, withAuth]);
+
+  const loadOrders = useCallback(() => {
+    if (!driver) return;
+    setIsLoadingOrders(true);
+    withAuth((token) => api.orders.list(token, { driverId: driver.id }))
+      .then(setOrders)
+      .catch(() => {})
+      .finally(() => setIsLoadingOrders(false));
+  }, [driver, withAuth]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const activeOrder = orders.find(
+    (o) => o.status === "in_transit" || o.status === "assigned",
   );
-  const completedOrders = mockOrders.filter((o) => o.status === "delivered");
-  const activeOrder = activeOrders[0];
+
+  // Загружаем маршрут и подключаем WebSocket для активного заказа
+  useEffect(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setRoute(null);
+    setCurrentIndex(0);
+
+    if (!activeOrder) return;
+
+    withAuth((token) => api.routes.get(token, activeOrder.id))
+      .then((r) => {
+        setRoute(r);
+        setCurrentIndex(r.currentIndex);
+      })
+      .catch(() => {});
+
+    let ws: WebSocket | null = null;
+    withAuth(async (token) => {
+      ws = api.routes.connectWs(activeOrder.id, token, (pos) => {
+        setCurrentIndex(pos.currentIndex);
+      });
+      wsRef.current = ws;
+    }).catch(() => {});
+
+    return () => {
+      ws?.close();
+      wsRef.current = null;
+    };
+  }, [activeOrder?.id, activeOrder?.status, withAuth]);
+
+  const handleStatusChange = async (newStatus: DriverStatus) => {
+    const prev = driverStatus;
+    setDriverStatus(newStatus);
+    try {
+      await withAuth((token) => api.drivers.updateMyStatus(token, newStatus));
+      if (driver) setDriver({ ...driver, status: newStatus });
+      toast.success(`Статус изменён: ${statusLabels[newStatus]}`);
+    } catch (err: unknown) {
+      setDriverStatus(prev);
+      toast.error((err as Error).message ?? "Не удалось изменить статус");
+    }
+  };
+
+  const handleCompleteDelivery = async (order: Order) => {
+    try {
+      const updated = await withAuth((token) =>
+        api.orders.updateStatus(token, order.id, { status: "delivered" }),
+      );
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "delivered" } : o)),
+      );
+      // Автоматически переводим водителя в "доступен"
+      await withAuth((token) => api.drivers.updateMyStatus(token, "available")).catch(() => {});
+      setDriverStatus("available");
+      if (driver) setDriver({ ...driver, status: "available" });
+      toast.success("Доставка завершена");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Не удалось завершить доставку");
+    }
+  };
+
+  const handleStartDelivery = async (order: Order) => {
+    try {
+      const updated = await withAuth((token) =>
+        api.orders.updateStatus(token, order.id, { status: "in_transit" }),
+      );
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "in_transit" } : o)),
+      );
+      // Автоматически переводим водителя в "в пути"
+      await withAuth((token) => api.drivers.updateMyStatus(token, "on_route")).catch(() => {});
+      setDriverStatus("on_route");
+      if (driver) setDriver({ ...driver, status: "on_route" });
+      toast.success("Доставка начата");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Не удалось обновить статус");
+    }
+  };
 
   if (!user) return null;
+
+  const completedOrders = orders.filter((o) => o.status === "delivered");
 
   return (
     <DashboardLayout>
@@ -73,9 +195,7 @@ export function DriverDashboard() {
               Добро пожаловать, {user.name}
             </p>
           </div>
-          <div
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${statusColors[driverStatus]}`}
-          >
+          <div className={`px-4 py-2 rounded-lg text-sm font-medium ${statusColors[driverStatus]}`}>
             {statusLabels[driverStatus]}
           </div>
         </div>
@@ -99,7 +219,7 @@ export function DriverDashboard() {
         </Card>
 
         {/* Статистика */}
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Рейтинг</CardTitle>
@@ -107,44 +227,54 @@ export function DriverDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {driverTemplate.rating}
+                {driver ? driver.rating.toFixed(1) : "—"}
               </div>
             </CardContent>
           </Card>
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle>Завершено</CardTitle>
-              <Package className="w-4 h-4 text-green-600" />
+              <CardTitle>Удостоверение</CardTitle>
+              <IdCard className="w-4 h-4 text-gray-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {driverTemplate.completedOrders}
+              <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                {driver ? driver.licenseNumber : "—"}
               </div>
+              {driver && (
+                <p className="text-xs text-gray-500">до {driver.licenseExpiry}</p>
+              )}
             </CardContent>
           </Card>
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Транспорт</CardTitle>
-              <Settings className="w-4 h-4 text-gray-600" />
+              <Car className="w-4 h-4 text-gray-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {driverTemplate.vehicleType}
-              </div>
-              <p className="text-xs text-gray-500">
-                {driverTemplate.vehicleNumber}
-              </p>
-            </CardContent>
-          </Card>
-          <Card variant="glass">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle>Локация</CardTitle>
-              <MapPin className="w-4 h-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {driverTemplate.currentLocation}
-              </div>
+              {vehicle ? (
+                <>
+                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                    {vehicle.plateNumber}
+                  </div>
+                  {(vehicle.brand || vehicle.model) && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {[vehicle.brand, vehicle.model].filter(Boolean).join(" ")}
+                      {vehicle.year ? ` (${vehicle.year})` : ""}
+                    </div>
+                  )}
+                  {(vehicle.capacityKg || vehicle.capacityM3) && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      {vehicle.capacityKg ? `${vehicle.capacityKg} кг` : ""}
+                      {vehicle.capacityKg && vehicle.capacityM3 ? " • " : ""}
+                      {vehicle.capacityM3 ? `${vehicle.capacityM3} м³` : ""}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {driver ? (driver.vehicleId ? "Загрузка..." : "Нет ТС") : "—"}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -152,7 +282,9 @@ export function DriverDashboard() {
         {/* Статус */}
         <Card variant="glass">
           <CardHeader>
-            <CardTitle>Изменить статус</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" /> Изменить статус
+            </CardTitle>
             <CardDescription>
               Установите свой статус доступности
             </CardDescription>
@@ -162,15 +294,15 @@ export function DriverDashboard() {
               <Label>Статус:</Label>
               <Select
                 value={driverStatus}
-                onValueChange={(v) => setDriverStatus(v as DriverStatus)}
+                onValueChange={(v) => handleStatusChange(v as DriverStatus)}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="available">Доступен</SelectItem>
-                  <SelectItem value="busy">Занят</SelectItem>
-                  <SelectItem value="offline">Не в сети</SelectItem>
+                  <SelectItem value="on_route">В пути</SelectItem>
+                  <SelectItem value="off_duty">Не на смене</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -190,17 +322,20 @@ export function DriverDashboard() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {activeOrder.id}
+                        #{shortId(activeOrder.id)}
                       </span>
-                      <StatusBadge status="in_progress" />
+                      <StatusBadge status={activeOrder.status} />
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {activeOrder.cargoType} • {activeOrder.weight} кг
+                      {activeOrder.cargoDescription ?? "Без описания"}
+                      {activeOrder.weightKg ? ` • ${activeOrder.weightKg} кг` : ""}
                     </p>
                   </div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">
-                    {activeOrder.price.toLocaleString("ru-RU")} ₽
-                  </div>
+                  {activeOrder.totalPrice != null && (
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
+                      {activeOrder.totalPrice.toLocaleString("ru-RU")} ₽
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
@@ -208,7 +343,7 @@ export function DriverDashboard() {
                     <div>
                       <p className="text-xs text-gray-500">Забрать:</p>
                       <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activeOrder.pickupAddress}
+                        {activeOrder.originAddress ?? "Со склада"}
                       </p>
                     </div>
                   </div>
@@ -217,104 +352,93 @@ export function DriverDashboard() {
                     <div>
                       <p className="text-xs text-gray-500">Доставить:</p>
                       <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activeOrder.deliveryAddress}
+                        {activeOrder.destinationAddress}
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {route && route.coordinates.length >= 2 ? (
+                  <div>
+                    <RouteMap coordinates={route.coordinates} currentIndex={currentIndex} />
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                      <span>📏 {route.distanceKm.toFixed(1)} км</span>
+                      <span>⏱ {Math.round(route.durationSec / 60)} мин</span>
+                      {activeOrder.status === "in_transit" && (
+                        <span className="text-blue-500 dark:text-blue-400 animate-pulse">● Live</span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="pt-4 border-t flex gap-2">
-                  <Button className="flex-1">Обновить локацию</Button>
-                  <Button variant="glass_outline" className="flex-1">
-                    Завершить доставку
-                  </Button>
+                  {activeOrder.status === "assigned" && (
+                    <Button
+                      className="flex-1"
+                      variant="glass_outline_easy"
+                      onClick={() => handleStartDelivery(activeOrder)}
+                    >
+                      Начать доставку
+                    </Button>
+                  )}
+                  {activeOrder.status === "in_transit" && (
+                    <Button
+                      className="flex-1"
+                      onClick={() => handleCompleteDelivery(activeOrder)}
+                    >
+                      Завершить доставку
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Сообщения */}
-          <Card variant="glass">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5" /> Сообщения
-              </CardTitle>
-              <CardDescription>Связь с менеджером</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-3 max-h-[280px] overflow-y-auto">
-                  {mockMessages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`p-3 rounded-lg text-sm ${
-                        msg.senderId === driverTemplate.id
-                          ? "bg-blue-100 dark:bg-blue-900 ml-8"
-                          : "bg-gray-100 dark:bg-gray-800 mr-8"
-                      }`}
-                    >
-                      <p className="font-medium text-xs text-gray-500 mb-1">
-                        {msg.senderName}
-                      </p>
-                      <p className="text-gray-900 dark:text-gray-100">
-                        {msg.text}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {new Date(msg.timestamp).toLocaleTimeString("ru-RU", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Textarea
-                    placeholder="Написать сообщение..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    rows={2}
-                  />
-                  <Button>Отправить</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* История */}
-          <Card variant="glass">
-            <CardHeader>
-              <CardTitle>История поездок</CardTitle>
-              <CardDescription>Завершённые перевозки</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 max-h-[380px] overflow-y-auto">
-                {completedOrders.map((order) => (
+        {/* История */}
+        <Card variant="glass">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" /> История поездок
+            </CardTitle>
+            <CardDescription>Завершённые перевозки</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-[380px] overflow-y-auto">
+              {isLoadingOrders ? (
+                <p className="text-gray-400 text-center py-4 text-sm">Загрузка...</p>
+              ) : completedOrders.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">Нет завершённых поездок</p>
+              ) : (
+                completedOrders.map((order) => (
                   <div key={order.id} className="border rounded-lg p-3">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-                          {order.id}
+                          #{shortId(order.id)}
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {order.cargoType}
+                          {order.cargoDescription ?? "Без описания"}
                         </p>
                       </div>
                       <StatusBadge status="delivered" />
                     </div>
-                    <p className="text-xs text-gray-500">
-                      {new Date(order.updatedAt).toLocaleDateString("ru-RU")}
-                    </p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
-                      {order.price.toLocaleString("ru-RU")} ₽
-                    </p>
+                    {order.deliveredAt && (
+                      <p className="text-xs text-gray-500">
+                        {new Date(order.deliveredAt).toLocaleDateString("ru-RU")}
+                      </p>
+                    )}
+                    {order.totalPrice != null && (
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
+                        {order.totalPrice.toLocaleString("ru-RU")} ₽
+                      </p>
+                    )}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

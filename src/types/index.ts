@@ -8,4 +8,6 @@ export interface User {
   slug?: string;
   avatarUrl?: string;
   createdAt?: string;
+  updatedAt?: string | null;
+  lastLoginAt?: string | null;
 }

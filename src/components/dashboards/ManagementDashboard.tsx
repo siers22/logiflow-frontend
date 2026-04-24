@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
+  TrendingDown,
   DollarSign,
   Package,
   Users,
-  Download,
   Calendar,
   User,
+  RussianRubleIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -28,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUser } from "@/lib/UserContext";
-import { mockOrders, mockDrivers } from "@/lib/mockData";
+import { api, type Order, type Driver } from "@/lib/api";
 import {
   LineChart,
   Line,
@@ -42,26 +43,87 @@ import {
   Cell,
 } from "recharts";
 
-const monthlyData = [
-  { month: "Июл", revenue: 450000, orders: 18 },
-  { month: "Авг", revenue: 520000, orders: 22 },
-  { month: "Сен", revenue: 480000, orders: 20 },
-  { month: "Окт", revenue: 620000, orders: 25 },
-  { month: "Ноя", revenue: 580000, orders: 23 },
-];
+type Period = "week" | "month" | "quarter" | "year";
+
+function getPeriodRange(period: Period): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date();
+  if (period === "week") from.setDate(to.getDate() - 7);
+  else if (period === "month") from.setMonth(to.getMonth() - 1);
+  else if (period === "quarter") from.setMonth(to.getMonth() - 3);
+  else from.setFullYear(to.getFullYear() - 1);
+  return {
+    from: from.toISOString().split("T")[0],
+    to: to.toISOString().split("T")[0],
+  };
+}
+
+function buildChartData(orders: Order[]) {
+  const byDate: Record<string, { revenue: number; orders: number }> = {};
+  orders.forEach((o) => {
+    const day = o.createdAt.split("T")[0];
+    if (!byDate[day]) byDate[day] = { revenue: 0, orders: 0 };
+    byDate[day].orders += 1;
+    byDate[day].revenue += o.totalPrice ?? 0;
+  });
+  return Object.entries(byDate)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-12)
+    .map(([date, v]) => ({
+      month: new Date(date).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "short",
+      }),
+      ...v,
+    }));
+}
+
+function shortId(id: string) {
+  return id.slice(0, 8).toUpperCase();
+}
 
 export function ManagementDashboard() {
-  const { user } = useUser();
-  const [period, setPeriod] = useState("month");
+  const { user, withAuth } = useUser();
+  const [period, setPeriod] = useState<Period>("month");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = useCallback(() => {
+    setIsLoading(true);
+    const range = getPeriodRange(period);
+    Promise.all([
+      withAuth((token) => api.orders.list(token)),
+      withAuth((token) => api.drivers.list(token)),
+    ])
+      .then(([ordersRes, driversRes]) => {
+        // фильтруем заявки по выбранному периоду на клиенте
+        const filtered = ordersRes.filter(
+          (o) =>
+            o.createdAt >= range.from && o.createdAt <= range.to + "T23:59:59",
+        );
+        setOrders(filtered);
+        setDrivers(driversRes);
+      })
+      .catch((err: Error) =>
+        toast.error(err.message ?? "Не удалось загрузить данные"),
+      )
+      .finally(() => setIsLoading(false));
+  }, [withAuth, period]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   if (!user) return null;
 
-  const totalRevenue = mockOrders.reduce((s, o) => s + o.price, 0);
-  const completedOrders = mockOrders.filter(
-    (o) => o.status === "delivered",
+  const totalRevenue = orders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
+  const completedOrders = orders.filter((o) => o.status === "delivered").length;
+  const activeOrders = orders.filter(
+    (o) => o.status === "in_transit" || o.status === "assigned",
   ).length;
-  const activeOrders = mockOrders.filter(
-    (o) => o.status === "in_progress" || o.status === "assigned",
+  const availableDrivers = drivers.filter(
+    (d) => d.status === "available",
   ).length;
 
   const statusData = [
@@ -69,13 +131,30 @@ export function ManagementDashboard() {
     { name: "В пути", value: activeOrders, color: "#3b82f6" },
     {
       name: "Ожидает",
-      value: mockOrders.filter((o) => o.status === "pending").length,
+      value: orders.filter((o) => o.status === "pending").length,
       color: "#f59e0b",
     },
-  ];
+    {
+      name: "Отменено",
+      value: orders.filter((o) => o.status === "cancelled").length,
+      color: "#ef4444",
+    },
+  ].filter((d) => d.value > 0);
 
-  const topDrivers = [...mockDrivers]
-    .sort((a, b) => b.completedOrders - a.completedOrders)
+  const chartData = buildChartData(orders);
+
+  // топ водителей по числу доставленных заявок в этом периоде
+  const driverOrderCount: Record<string, number> = {};
+  orders.forEach((o) => {
+    if (o.status === "delivered" && o.driverId) {
+      driverOrderCount[o.driverId] = (driverOrderCount[o.driverId] ?? 0) + 1;
+    }
+  });
+  const topDrivers = drivers
+    .filter((d) => driverOrderCount[d.id])
+    .sort(
+      (a, b) => (driverOrderCount[b.id] ?? 0) - (driverOrderCount[a.id] ?? 0),
+    )
     .slice(0, 5);
 
   return (
@@ -91,9 +170,6 @@ export function ManagementDashboard() {
               Добро пожаловать, {user.name}
             </p>
           </div>
-          <Button>
-            <Download className="w-4 h-4 mr-2" /> Экспорт отчёта
-          </Button>
         </div>
 
         {/* Профиль */}
@@ -119,15 +195,22 @@ export function ManagementDashboard() {
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Выручка</CardTitle>
-              <DollarSign className="w-4 h-4 text-green-600" />
+              <RussianRubleIcon className={`w-4 h-4 ${!isLoading && totalRevenue < 0 ? "text-red-500" : "text-green-600"}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {totalRevenue.toLocaleString("ru-RU")} ₽
+              <div className={`text-2xl font-bold ${!isLoading && totalRevenue < 0 ? "text-red-500" : "text-gray-900 dark:text-gray-100"}`}>
+                {isLoading ? "—" : totalRevenue.toLocaleString("ru-RU") + " ₽"}
               </div>
-              <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
-                <TrendingUp className="w-3 h-3" /> +12% за месяц
-              </p>
+              {!isLoading && totalRevenue > 0 && (
+                <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                  <TrendingUp className="w-3 h-3" /> За выбранный период
+                </p>
+              )}
+              {!isLoading && totalRevenue < 0 && (
+                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                  <TrendingDown className="w-3 h-3" /> Убыток за период
+                </p>
+              )}
             </CardContent>
           </Card>
           <Card variant="glass">
@@ -137,9 +220,9 @@ export function ManagementDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {mockOrders.length}
+                {isLoading ? "—" : orders.length}
               </div>
-              <p className="text-xs text-gray-500 mt-1">За текущий период</p>
+              <p className="text-xs text-gray-500 mt-1">За выбранный период</p>
             </CardContent>
           </Card>
           <Card variant="glass">
@@ -149,11 +232,12 @@ export function ManagementDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {completedOrders}
+                {isLoading ? "—" : completedOrders}
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {((completedOrders / mockOrders.length) * 100).toFixed(0)}% от
-                всех
+                {!isLoading && orders.length > 0
+                  ? `${((completedOrders / orders.length) * 100).toFixed(0)}% от всех`
+                  : "За период"}
               </p>
             </CardContent>
           </Card>
@@ -164,11 +248,10 @@ export function ManagementDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {mockDrivers.length}
+                {isLoading ? "—" : drivers.length}
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {mockDrivers.filter((d) => d.status === "available").length}{" "}
-                доступно
+                {!isLoading ? `${availableDrivers} доступно` : ""}
               </p>
             </CardContent>
           </Card>
@@ -180,11 +263,14 @@ export function ManagementDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Выручка и заказы</CardTitle>
-                <CardDescription>Динамика за последние месяцы</CardDescription>
+                <CardDescription>Динамика за период</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-600" />
-                <Select value={period} onValueChange={setPeriod}>
+                <Select
+                  value={period}
+                  onValueChange={(v) => setPeriod(v as Period)}
+                >
                   <SelectTrigger className="w-[150px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -199,31 +285,41 @@ export function ManagementDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis yAxisId="left" />
-                <YAxis yAxisId="right" orientation="right" />
-                <Tooltip />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  name="Выручка (₽)"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="orders"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  name="Заказы"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {isLoading ? (
+              <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">
+                Загрузка...
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">
+                Нет данных за выбранный период
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    name="Выручка (₽)"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="orders"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    name="Заказы"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -235,26 +331,36 @@ export function ManagementDashboard() {
               <CardDescription>Распределение по статусам</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    labelLine={false}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                    dataKey="value"
-                  >
-                    {statusData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {isLoading ? (
+                <div className="h-[260px] flex items-center justify-center text-gray-400 text-sm">
+                  Загрузка...
+                </div>
+              ) : statusData.length === 0 ? (
+                <div className="h-[260px] flex items-center justify-center text-gray-400 text-sm">
+                  Нет данных
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      labelLine={false}
+                      label={({ name, percent }) =>
+                        `${name} ${(percent * 100).toFixed(0)}%`
+                      }
+                      dataKey="value"
+                    >
+                      {statusData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
@@ -263,40 +369,50 @@ export function ManagementDashboard() {
             <CardHeader>
               <CardTitle>Топ водителей</CardTitle>
               <CardDescription>
-                По количеству выполненных заказов
+                По доставленным заказам за период
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {topDrivers.map((driver, i) => (
-                  <div
-                    key={driver.id}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-sm font-medium text-blue-800 dark:text-blue-200">
-                        {i + 1}
+              {isLoading ? (
+                <p className="text-gray-400 text-sm text-center py-4">
+                  Загрузка...
+                </p>
+              ) : topDrivers.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-4">
+                  Нет данных за период
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {topDrivers.map((driver, i) => (
+                    <div
+                      key={driver.id}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-sm font-medium text-blue-800 dark:text-blue-200">
+                          {i + 1}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            #{shortId(driver.id)}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {driver.licenseNumber}
+                          </p>
+                        </div>
                       </div>
-                      <div>
+                      <div className="text-right">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {driver.name}
+                          {driverOrderCount[driver.id]} заказов
                         </div>
                         <p className="text-xs text-gray-500">
-                          {driver.vehicleType}
+                          ⭐ {driver.rating.toFixed(1)}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {driver.completedOrders} заказов
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        ⭐ {driver.rating}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
