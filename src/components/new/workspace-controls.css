@@ -1,0 +1,40 @@
+/* Shared controls for dashboard dialogs and portal menus. */
+[data-slot="dialog-content"] [data-slot="input"],
+[data-slot="dialog-content"] [data-slot="textarea"],
+[data-slot="dialog-content"] [data-slot="select-trigger"] {
+  min-height: 39px;
+  border: 1px solid #e8e3f1;
+  border-radius: 10px;
+  background: #fcfbff;
+  box-shadow: none;
+}
+[data-slot="dialog-content"] [data-slot="button"] {
+  min-height: 38px;
+  border-radius: 10px;
+  font-weight: 650;
+}
+[data-slot="dialog-content"] [data-slot="button"].bg-primary {
+  background: #8272e6;
+  color: #fff;
+}
+[data-slot="select-content"] {
+  border: 1px solid #e8e3f1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(40, 29, 72, .13);
+  backdrop-filter: none;
+}
+.dark [data-slot="dialog-content"] [data-slot="input"],
+.dark [data-slot="dialog-content"] [data-slot="textarea"],
+.dark [data-slot="dialog-content"] [data-slot="select-trigger"] {
+  border-color: #514768;
+  background: #312b3f;
+  color: #f4efff;
+}
+.dark [data-slot="select-content"] {
+  border-color: #514768;
+  background: #312b3f;
+  color: #f4efff;
+}
+[data-slot="dialog-content"] [data-slot="button"].bg-destructive{background:#b44761;color:#fff}
+[data-slot="dialog-content"] [data-slot="button"].bg-destructive:hover{background:#9d3651}

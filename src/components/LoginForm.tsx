@@ -99,7 +99,7 @@ export function LoginForm() {
   const onRegisterSubmit = async (data: RegisterFields) => {
     setServerError(null);
     try {
-      await register(data.email, data.password, data.fullName.trim(), "client");
+      await register(data.email, data.password, data.fullName.trim());
     } catch (err) {
       setServerError(
         err instanceof ApiError

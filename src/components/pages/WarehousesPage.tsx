@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useState, useEffect } from "react";
 import {
@@ -104,14 +105,14 @@ export function WarehousesPage() {
   };
 
   const handleCreate = async () => {
-    if (!form.name || !form.address) return;
+    if (!form.name || !form.address || !form.city) return;
     setIsSaving(true);
     try {
       const created = await withAuth((token) =>
         api.warehouses.create(token, {
           name: form.name!,
           address: form.address!,
-          city: form.city ?? null,
+          city: form.city!,
           latitude: form.latitude ?? null,
           longitude: form.longitude ?? null,
         }),
@@ -174,7 +175,7 @@ export function WarehousesPage() {
     setForm({
       name: warehouse.name,
       address: warehouse.address,
-      city: warehouse.city,
+      city: warehouse.city ?? "",
       latitude: warehouse.latitude,
       longitude: warehouse.longitude,
       status: warehouse.status,
@@ -283,6 +284,7 @@ export function WarehousesPage() {
                           <div className="min-w-0">
                             <div className="font-medium text-gray-900 dark:text-gray-100 text-sm">
                               {warehouse.name}
+                              <Link className="ml-3 text-xs underline" href={`/dashboard/warehouses/${warehouse.id}/orders`}>Заказы склада</Link>
                             </div>
                             <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
                               <MapPin className="w-3 h-3" />
@@ -290,7 +292,7 @@ export function WarehousesPage() {
                                 ? `${warehouse.city}, ${warehouse.address}`
                                 : warehouse.address}
                             </div>
-                            {warehouse.latitude && warehouse.longitude && (
+                            {warehouse.latitude != null && warehouse.longitude != null && (
                               <div className="text-xs text-gray-400 mt-0.5">
                                 {warehouse.latitude.toFixed(4)},{" "}
                                 {warehouse.longitude.toFixed(4)}
@@ -357,11 +359,11 @@ export function WarehousesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Город</Label>
+              <Label>Город *</Label>
               <Input
                 placeholder="Москва"
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, city: e.target.value || null }))
+                  setForm((f) => ({ ...f, city: e.target.value }))
                 }
               />
             </div>
@@ -404,7 +406,7 @@ export function WarehousesPage() {
               </Button>
               <Button
                 onClick={handleCreate}
-                disabled={isSaving || !form.name || !form.address}
+                disabled={isSaving || !form.name || !form.address || !form.city}
               >
                 {isSaving ? "Создание..." : "Создать"}
               </Button>
@@ -447,7 +449,7 @@ export function WarehousesPage() {
               <Input
                 value={form.city ?? ""}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, city: e.target.value || null }))
+                  setForm((f) => ({ ...f, city: e.target.value }))
                 }
               />
             </div>

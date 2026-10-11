@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Package, Plus, Clock, CheckCircle, User } from "lucide-react";
-import { toast } from "sonner";
-import { DashboardLayout } from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Package, Plus, Clock, CheckCircle, User } from 'lucide-react';
+import { toast } from 'sonner';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { RoleBadge, StatusBadge } from "@/components/ui/badge";
+} from '@/components/ui/card';
+import { RoleBadge, StatusBadge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -21,13 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import { useUser } from "@/lib/UserContext";
-import { api, ApiError, type Order, type OrderCreate } from "@/lib/api";
+} from '@/components/ui/dialog';
+import { useUser } from '@/lib/UserContext';
+import { api, type Order } from '@/lib/api';
+import { OrderDraftForm } from '@/components/orders/OrderDraftForm';
+import { RoleFeatureCard } from '@/components/new/RoleFeatureCard';
 
 function orderShortId(id: string) {
   return id.slice(0, 8).toUpperCase();
@@ -39,59 +37,36 @@ export function ClientDashboard() {
   const [isOpen, setIsOpen] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm] = useState<Partial<OrderCreate>>({});
 
   const loadOrders = useCallback(() => {
     setIsLoading(true);
     withAuth((token) => api.orders.list(token))
       .then(setOrders)
-      .catch((err: Error) => toast.error(err.message ?? "Не удалось загрузить заявки"))
+      .catch((err: Error) =>
+        toast.error(err.message ?? 'Не удалось загрузить заявки'),
+      )
       .finally(() => setIsLoading(false));
   }, [withAuth]);
 
   useEffect(() => {
     loadOrders();
+    const tick = () => {
+      if (!document.hidden) loadOrders();
+    };
+    const timer = window.setInterval(tick, 15000);
+    return () => window.clearInterval(timer);
   }, [loadOrders]);
-
-  const handleCreate = async () => {
-    if (!form.destinationAddress) return;
-    setIsCreating(true);
-    try {
-      const created = await withAuth((token) =>
-        api.orders.create(token, {
-          destinationAddress: form.destinationAddress!,
-          originAddress: form.originAddress ?? null,
-          cargoDescription: form.cargoDescription ?? null,
-          weightKg: form.weightKg ?? null,
-          volumeM3: form.volumeM3 ?? null,
-        }),
-      );
-      setOrders((prev) => [created, ...prev]);
-      setIsOpen(false);
-      setForm({});
-      toast.success("Заявка создана");
-    } catch (err: unknown) {
-      if (err instanceof ApiError && err.status >= 500) {
-        toast.error("Не удалось создать заявку — проверьте правильность введённых адресов");
-      } else {
-        toast.error((err as Error).message ?? "Не удалось создать заявку");
-      }
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   if (!user) return null;
 
   const inTransitCount = orders.filter(
-    (o) => o.status === "in_transit" || o.status === "assigned",
+    (o) => o.status === 'in_transit' || o.status === 'assigned',
   ).length;
-  const deliveredCount = orders.filter((o) => o.status === "delivered").length;
+  const deliveredCount = orders.filter((o) => o.status === 'completed').length;
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="role-dashboard client-dashboard space-y-6">
         {/* Заголовок */}
         <div className="flex items-center justify-between">
           <div>
@@ -113,82 +88,16 @@ export function ClientDashboard() {
                   Заполните форму для создания заявки
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Адрес отправления</Label>
-                    <AddressAutocomplete
-                      placeholder="Москва, ул. Ленинская, 15"
-                      value={form.originAddress ?? ""}
-                      onChange={(v) =>
-                        setForm((f) => ({ ...f, originAddress: v || null }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Адрес доставки *</Label>
-                    <AddressAutocomplete
-                      placeholder="Санкт-Петербург, пр. Невский, 28"
-                      value={form.destinationAddress ?? ""}
-                      onChange={(v) =>
-                        setForm((f) => ({ ...f, destinationAddress: v }))
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Вес (кг)</Label>
-                    <Input
-                      type="number"
-                      placeholder="150"
-                      value={form.weightKg ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          weightKg: e.target.value ? parseFloat(e.target.value) : null,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Объём (м³)</Label>
-                    <Input
-                      type="number"
-                      placeholder="1.5"
-                      value={form.volumeM3 ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          volumeM3: e.target.value ? parseFloat(e.target.value) : null,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Описание груза</Label>
-                  <Textarea
-                    placeholder="Электроника, хрупкое"
-                    rows={3}
-                    value={form.cargoDescription ?? ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, cargoDescription: e.target.value || null }))
-                    }
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button variant="outline" onClick={() => setIsOpen(false)}>
-                    Отмена
-                  </Button>
-                  <Button
-                    onClick={handleCreate}
-                    disabled={isCreating || !form.destinationAddress}
-                  >
-                    {isCreating ? "Создание..." : "Создать заявку"}
-                  </Button>
-                </div>
-              </div>
+              <OrderDraftForm
+                onSaved={(created) => {
+                  setOrders((previous) => [created, ...previous]);
+                  setIsOpen(false);
+                  toast.success(
+                    'Черновик создан. Заполните реквизиты перевозки.',
+                  );
+                  router.push(`/dashboard/orders/${created.id}`);
+                }}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -220,7 +129,7 @@ export function ClientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {isLoading ? "—" : orders.length}
+                {isLoading ? '—' : orders.length}
               </div>
             </CardContent>
           </Card>
@@ -231,7 +140,7 @@ export function ClientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {isLoading ? "—" : inTransitCount}
+                {isLoading ? '—' : inTransitCount}
               </div>
             </CardContent>
           </Card>
@@ -242,14 +151,23 @@ export function ClientDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {isLoading ? "—" : deliveredCount}
+                {isLoading ? '—' : deliveredCount}
               </div>
             </CardContent>
           </Card>
         </div>
 
+        <RoleFeatureCard
+          className="role-feature"
+          eyebrow="НОВАЯ ДОСТАВКА"
+          title="От заявки до вручения"
+          description="Выберите склад, укажите адрес и следите за движением груза."
+          action="Создать заявку"
+          onAction={() => setIsOpen(true)}
+        />
+
         {/* Список заказов */}
-        <Card variant="glass">
+        <Card variant="glass" className="client-orders">
           <CardHeader>
             <CardTitle>Активные заявки</CardTitle>
             <CardDescription>
@@ -277,20 +195,22 @@ export function ClientDashboard() {
               <div className="space-y-3">
                 {orders.map((order) => {
                   const statusAccent =
-                    order.status === "in_transit"
-                      ? "border-l-amber-400"
-                      : order.status === "delivered"
-                        ? "border-l-green-400"
-                        : order.status === "cancelled"
-                          ? "border-l-red-400"
-                          : order.status === "assigned"
-                            ? "border-l-orange-400"
-                            : "border-l-blue-400";
+                    order.status === 'in_transit'
+                      ? 'border-l-amber-400'
+                      : order.status === 'completed'
+                        ? 'border-l-green-400'
+                        : order.status === 'cancelled'
+                          ? 'border-l-red-400'
+                          : order.status === 'assigned'
+                            ? 'border-l-orange-400'
+                            : 'border-l-blue-400';
 
                   return (
                     <div
                       key={order.id}
-                      onClick={() => router.push(`/dashboard/orders/${order.id}`)}
+                      onClick={() =>
+                        router.push(`/dashboard/orders/${order.id}`)
+                      }
                       className={`rounded-xl p-4 bg-white/50 dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08] border-l-[3px] ${statusAccent} hover:bg-white/70 dark:hover:bg-white/[0.07] hover:shadow-md transition-all cursor-pointer group`}
                     >
                       <div className="flex items-start justify-between mb-3">
@@ -300,25 +220,27 @@ export function ClientDashboard() {
                               #{orderShortId(order.id)}
                             </span>
                             <StatusBadge status={order.status} />
-                            {order.status === "in_transit" && (
+                            {order.status === 'in_transit' && (
                               <span className="text-xs text-blue-500 dark:text-blue-400 group-hover:underline">
                                 Отследить →
                               </span>
                             )}
                           </div>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {order.cargoDescription ?? "Без описания"}
-                            {order.weightKg ? ` • ${order.weightKg} кг` : ""}
+                            {order.cargoDescription ?? 'Без описания'}
+                            {order.weightKg ? ` • ${order.weightKg} кг` : ''}
                           </p>
                         </div>
                         <div className="text-right">
                           {order.totalPrice != null && (
                             <div className="font-semibold text-gray-900 dark:text-gray-100">
-                              {order.totalPrice.toLocaleString("ru-RU")} ₽
+                              {order.totalPrice.toLocaleString('ru-RU')} ₽
                             </div>
                           )}
                           <p className="text-xs text-gray-400">
-                            {new Date(order.createdAt).toLocaleDateString("ru-RU")}
+                            {new Date(order.createdAt).toLocaleDateString(
+                              'ru-RU',
+                            )}
                           </p>
                         </div>
                       </div>
@@ -330,7 +252,7 @@ export function ClientDashboard() {
                           <div className="w-2 h-2 rounded-full bg-green-400" />
                         </div>
                         <div className="space-y-1.5">
-                          <p>{order.originAddress ?? "Со склада"}</p>
+                          <p>{order.originAddress ?? 'Со склада'}</p>
                           <p>{order.destinationAddress}</p>
                         </div>
                       </div>

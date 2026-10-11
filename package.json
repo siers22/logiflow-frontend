@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-transform-types --test tests/*.test.mjs",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint src tests --max-warnings=0",
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -44,12 +47,11 @@
     "input-otp": "^1.4.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.487.0",
-    "next": "^15.1.0",
+    "next": "^15.5.27",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.55.0",
-    "react-leaflet": "^5.0.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "sonner": "^2.0.3",
@@ -58,11 +60,22 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^20.10.0",
+    "@types/node": "^24.19.2",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.71.1"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "overrides": {
+    "postcss": "^8.5.29"
   }
 }

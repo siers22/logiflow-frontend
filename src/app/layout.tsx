@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/components/new/workspace-controls.css";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { UserProvider } from "@/lib/UserContext";
 import { Toaster } from "@/components/ui/sonner";
-import { BackgroundAnimation } from "@/components/BackgroundAnimation"; // <-- добавь импорт
 
 export const metadata: Metadata = {
   title: "LogiFlow — Система управления логистикой",

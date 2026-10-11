@@ -79,7 +79,6 @@ const roleVariantMap: Record<
   client: "roleClient",
   driver: "roleDriver",
   manager: "roleManager",
-  management: "roleManagement",
 };
 
 const roleLabelMap: Record<string, string> = {
@@ -87,7 +86,6 @@ const roleLabelMap: Record<string, string> = {
   client: "Клиент",
   driver: "Водитель",
   manager: "Менеджер",
-  management: "Руководство",
 };
 
 function RoleBadge({ role, className }: { role: string; className?: string }) {
@@ -108,6 +106,8 @@ const statusConfig: Record<
     icon: React.ReactNode;
   }
 > = {
+  draft: { variant: "outline", label: "Черновик", icon: <Clock /> },
+  ready_for_dispatch: { variant: "statusPending", label: "На распределении", icon: <Clock /> },
   pending: {
     variant: "statusPending",
     label: "Ожидает",
@@ -133,6 +133,8 @@ const statusConfig: Record<
     label: "Доставлен",
     icon: <CircleCheck />,
   },
+  arrived: { variant: "statusInProgress", label: "Прибыл", icon: <Truck /> },
+  completed: { variant: "statusDelivered", label: "Доставлен", icon: <CircleCheck /> },
   cancelled: {
     variant: "statusCancelled",
     label: "Отменён",
@@ -147,7 +149,7 @@ function StatusBadge({
   status: string;
   className?: string;
 }) {
-  const cfg = statusConfig[status] ?? statusConfig.pending;
+  const cfg = statusConfig[status] ?? { variant: "outline" as const, label: status, icon: null };
 
   return (
     <Badge variant={cfg.variant} className={className}>

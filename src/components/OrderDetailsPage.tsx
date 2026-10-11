@@ -1,404 +1,560 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Package,
-  User,
-  MapPin,
-  Calendar,
-  Trash2,
-} from "lucide-react";
-import { toast } from "sonner";
-import { DashboardLayout } from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+'use client';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { api } from '@/lib/api';
+import { useUser } from '@/lib/UserContext';
+import { useWorkspace } from '@/lib/WorkspaceContext';
+import { useOrderWorkspace } from '@/lib/useOrderWorkspace';
+import { orderActions, submitBlockers } from '@/lib/order-actions';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { RouteMap } from '@/components/RouteMap';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { StatusBadge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { useUser } from "@/lib/UserContext";
-import { api, ApiError, type Order, type Route, type Driver } from "@/lib/api";
-import { RouteMap } from "@/components/RouteMap";
-
-function getDeliveryProgress(status: Order["status"]): number {
-  const map: Record<Order["status"], number> = {
-    pending: 0,
-    assigned: 25,
-    in_transit: 65,
-    delivered: 100,
-    cancelled: 0,
-  };
-  return map[status] ?? 0;
-}
-
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase();
-}
-
-interface OrderDetailsPageProps {
-  orderId: string;
-}
-
-export function OrderDetailsPage({ orderId }: OrderDetailsPageProps) {
-  const router = useRouter();
-  const { withAuth, user } = useUser();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [isCancelOpen, setIsCancelOpen] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [route, setRoute] = useState<Route | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [driver, setDriver] = useState<Driver | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { OrderDraftForm } from '@/components/orders/OrderDraftForm';
+import { TransportDetailsForm } from '@/components/orders/TransportDetailsForm';
+import { WarehouseOperationsPanel } from '@/components/orders/WarehouseOperationsPanel';
+import { DeliveryReceiptPanel } from '@/components/orders/DeliveryReceiptPanel';
+import { TripHandoversPanel } from '@/components/orders/TripHandoversPanel';
+import { OrderDocumentsPanel } from '@/components/orders/OrderDocumentsPanel';
+import { AssignmentHistory } from '@/components/orders/AssignmentHistory';
+import { AssignmentPanel } from '@/components/orders/AssignmentPanel';
+import { OrderIncidentsPanel } from '@/components/orders/OrderIncidentsPanel';
+const noAssignments: import('@/lib/api').Assignment[] = [];
+export function OrderDetailsPage({ orderId }: { orderId: string }) {
+  const [, setClock] = useState(0);
   useEffect(() => {
-    setIsLoading(true);
-    withAuth((token) => api.orders.get(token, orderId))
-      .then((o) => {
-        setOrder(o);
-        if (o.driverId) {
-          withAuth((token) => api.drivers.list(token))
-            .then((list) => {
-              const found = list.find((d) => d.id === o.driverId);
-              if (found) setDriver(found);
-            })
-            .catch(() => {});
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
-          setNotFound(true);
-        } else {
-          toast.error((err as Error).message ?? "Не удалось загрузить заявку");
-          setNotFound(true);
-        }
-      })
-      .finally(() => setIsLoading(false));
-  }, [orderId, withAuth]);
-
-  // Загружаем маршрут и подключаемся к WebSocket когда заявка активна
-  useEffect(() => {
-    if (!order || (order.status !== "in_transit" && order.status !== "assigned")) return;
-
-    withAuth((token) => api.routes.get(token, orderId))
-      .then((r) => {
-        setRoute(r);
-        setCurrentIndex(r.currentIndex);
-      })
-      .catch(() => {}); // маршрут может ещё не существовать
-
-    let ws: WebSocket | null = null;
-    withAuth(async (token) => {
-      ws = api.routes.connectWs(orderId, token, (pos) => {
-        setCurrentIndex(pos.currentIndex);
-      });
-      wsRef.current = ws;
-    }).catch(() => {});
-
-    return () => {
-      ws?.close();
-      wsRef.current = null;
-    };
-  }, [order?.status, orderId, withAuth]);
-
-  const handleCancel = async () => {
-    if (!order) return;
-    setIsCancelling(true);
-    try {
-      await withAuth((token) => api.orders.cancel(token, order.id));
-      setOrder({ ...order, status: "cancelled" });
-      setIsCancelOpen(false);
-      toast.success("Заявка отменена");
-    } catch (err: unknown) {
-      toast.error((err as Error).message ?? "Не удалось отменить заявку");
-    } finally {
-      setIsCancelling(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="text-center py-20 text-gray-400 text-sm">Загрузка...</div>
-      </DashboardLayout>
+    const timer = window.setInterval(
+      () => setClock((value) => value + 1),
+      1000,
     );
-  }
-
-  if (notFound || !order) {
+    return () => window.clearInterval(timer);
+  }, []);
+  const router = useRouter(),
+    { user } = useUser(),
+    profile = useWorkspace();
+  const state = useOrderWorkspace(orderId),
+    {
+      order,
+      errors,
+      route,
+      assignments,
+      operations,
+      incidents,
+      receipt,
+      command,
+      busy,
+    } = state;
+  const [cancelOpen, setCancelOpen] = useState(false),
+    [cancelComment, setCancelComment] = useState('');
+  const [editOpen, setEditOpen] = useState(false),
+    [transportOpen, setTransportOpen] = useState(false);
+  const retry = (section: string) =>
+    errors[section] && (
+      <p role="alert" className="text-sm text-red-600">
+        {errors[section]}{' '}
+        <Button variant="outline" size="sm" onClick={() => state.refresh()}>
+          Повторить
+        </Button>
+      </p>
+    );
+  if (!order)
     return (
       <DashboardLayout>
-        <div className="text-center py-20">
-          <p className="text-gray-500">Заказ не найден</p>
-          <Button variant="outline" className="mt-4" onClick={() => router.back()}>
+        <div className="space-y-4 py-12">
+          <h1>
+            {state.loading ? 'Загрузка заказа…' : 'Не удалось загрузить заказ'}
+          </h1>
+          {retry('order')}
+          <Button variant="outline" onClick={() => router.back()}>
             Назад
           </Button>
         </div>
       </DashboardLayout>
     );
-  }
-
-  const progress = getDeliveryProgress(order.status);
-  const canCancel = order.status === "pending" && user?.role !== "driver";
-
+  const actor = {
+    id: user?.id ?? '',
+    role: user?.role ?? '',
+    warehouseId: profile.manager?.warehouseId,
+    driverId: profile.driver?.id,
+  };
+  const assignment =
+    assignments?.find((a) =>
+      ['pending_acceptance', 'accepted', 'active'].includes(a.status),
+    ) ?? null;
+  const unavailable =
+    profile.loading ||
+    !!profile.error ||
+    !!errors.order ||
+    !!errors.assignments;
+  const actions = orderActions({
+    order,
+    actor,
+    assignment,
+    operations: unavailable ? null : operations,
+    incidents: unavailable ? null : incidents,
+    receipt: unavailable ? undefined : receipt,
+  });
+  const blockers = submitBlockers(order, route);
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="glass_outline" size="default" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4" />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={() => router.back()}>
+            Назад
           </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-gray-900 dark:text-gray-100">
-                Заявка #{shortId(order.id)}
-              </h1>
-              <StatusBadge status={order.status} />
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Детали и статус перевозки
-            </p>
-          </div>
-          {canCancel && (
+          <h1 className="flex-1">
+            Заказ #{order.id.slice(0, 8).toUpperCase()}
+          </h1>
+          <StatusBadge status={order.status} />
+          <Button
+            disabled={busy}
+            variant="outline"
+            onClick={() => state.refresh()}
+          >
+            Обновить
+          </Button>
+          {actions.cancel && (
             <Button
+              disabled={busy}
               variant="destructive"
-              onClick={() => setIsCancelOpen(true)}
+              onClick={() => setCancelOpen(true)}
             >
-              <Trash2 className="w-4 h-4 mr-2" /> Отменить
+              Отменить заказ
             </Button>
           )}
         </div>
-
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Маршрут */}
-          <Card className="lg:col-span-2" variant="glass">
+        {retry('order')}
+        {retry('assignments')}
+        {profile.error && (
+          <p role="alert">
+            {profile.error}{' '}
+            <Button variant="outline" onClick={profile.reload}>
+              Повторить загрузку профиля
+            </Button>
+          </p>
+        )}
+        <div className="flex flex-wrap gap-3">
+          {actions.edit && (
+            <>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setEditOpen((v) => !v)}
+              >
+                Изменить черновик
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setTransportOpen((v) => !v);
+                  document
+                    .getElementById('transport')
+                    ?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Реквизиты перевозки
+              </Button>
+              <Button
+                disabled={busy || unavailable || !!blockers.length}
+                onClick={() =>
+                  command(
+                    (token) => api.orders.submit(token, order.id),
+                    'Заказ отправлен на распределение',
+                  )
+                }
+              >
+                Отправить на распределение
+              </Button>
+            </>
+          )}
+          {actions.start && assignment && (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                command(
+                  (token) => api.assignments.start(token, assignment.id),
+                  'Перевозка начата',
+                )
+              }
+            >
+              Начать перевозку
+            </Button>
+          )}
+          {actions.arrive && assignment && (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                command(
+                  (token) => api.assignments.arrive(token, assignment.id),
+                  'Прибытие отмечено',
+                )
+              }
+            >
+              Отметить прибытие
+            </Button>
+          )}
+          {actions.complete && assignment && (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                command(
+                  (token) => api.assignments.complete(token, assignment.id),
+                  'Перевозка завершена. Документы появятся после обработки.',
+                )
+              }
+            >
+              Завершить перевозку
+            </Button>
+          )}
+        </div>
+        {actions.edit && blockers.length > 0 && (
+          <div className="rounded-lg border border-amber-300 p-4 text-sm">
+            <p className="font-medium">До отправки заказа:</p>
+            <ul className="list-disc pl-5">
+              {blockers.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+            {!order.transportDetails && order.transportPolicyVersion === 1 && (
+              <Button variant="link" onClick={() => setTransportOpen(true)}>
+                Заполнить реквизиты
+              </Button>
+            )}
+          </div>
+        )}
+        {order.status === 'assigned' &&
+          order.originWarehouseId &&
+          !actions.loaded &&
+          assignment?.status === 'accepted' && (
+            <p className="rounded-lg border p-3 text-sm">
+              Для выезда ожидается подтверждение погрузки складом отправления.
+            </p>
+          )}
+        {incidents?.some((i) => i.status === 'open') && (
+          <a
+            href="#incidents"
+            className="block rounded-lg border border-amber-400 p-3 text-sm"
+          >
+            Есть открытые проблемы перевозки. Для погрузки, старта и завершения
+            требуется решение ответственного.
+          </a>
+        )}
+        {editOpen && actions.edit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Черновик</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <OrderDraftForm
+                key={order.id}
+                order={order}
+                onSaved={() => {
+                  setEditOpen(false);
+                  state.refresh();
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Маршрут</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex flex-col items-center gap-[4px] mt-1 shrink-0">
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    <div className="w-px h-10 bg-gray-300 dark:bg-gray-600" />
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <div className="text-xs text-gray-500 mb-0.5">Откуда</div>
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {order.originAddress ?? "Со склада"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500 mb-0.5">Куда</div>
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {order.destinationAddress}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-black/[0.06] dark:border-white/[0.06] space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Прогресс доставки
-                    </span>
-                    <span className="text-gray-900 dark:text-gray-100">
-                      {progress}%
-                    </span>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                </div>
-
-                {route && route.coordinates.length >= 2 ? (
-                  <div className="pt-2">
-                    <RouteMap coordinates={route.coordinates} currentIndex={currentIndex} />
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                      <span>📏 {route.distanceKm.toFixed(1)} км</span>
-                      <span>⏱ {Math.round(route.durationSec / 60)} мин</span>
-                      {order.status === "in_transit" && (
-                        <span className="text-blue-500 dark:text-blue-400 animate-pulse">● Live</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 pt-2">
-                    {order.status === "in_transit" || order.status === "assigned"
-                      ? "Маршрут загружается..."
-                      : "Карта маршрута будет доступна после назначения водителя"}
+            <CardContent className="space-y-4">
+              <p>
+                <span className="text-muted-foreground">Откуда:</span>{' '}
+                {order.originAddress || 'Склад отправления'}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Куда:</span>{' '}
+                {order.destinationAddress}
+              </p>
+              {route && (
+                <>
+                  <p className="text-sm">
+                    Расстояние: {route.distanceKm?.toFixed(1) ?? '—'} км ·
+                    Время:{' '}
+                    {route.durationSec == null
+                      ? '—'
+                      : Math.round(route.durationSec / 60)}{' '}
+                    мин
                   </p>
-                )}
-              </div>
+                  {route.coordinates.length > 0 && (
+                    <RouteMap
+                      coordinates={route.coordinates}
+                      currentIndex={route.currentIndex}
+                    />
+                  )}
+                </>
+              )}
+              {retry('route')}
             </CardContent>
           </Card>
-
-          {/* Сайдбар */}
-          <div className="space-y-6">
-            <Card variant="glass">
-              <CardHeader>
-                <CardTitle>Детали</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <Package className="w-5 h-5 text-gray-600 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Груз</div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
-                      {order.cargoDescription ?? "Без описания"}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5 flex gap-3">
-                      {order.weightKg != null && <span>{order.weightKg} кг</span>}
-                      {order.volumeM3 != null && <span>{order.volumeM3} м³</span>}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-gray-600 mt-0.5" />
-                  <div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Создана</div>
-                    <div className="text-sm text-gray-900 dark:text-gray-100">
-                      {new Date(order.createdAt).toLocaleString("ru-RU")}
-                    </div>
-                  </div>
-                </div>
-
-                {order.assignedAt && (
-                  <div className="flex items-start gap-3">
-                    <Calendar className="w-5 h-5 text-orange-600 mt-0.5" />
-                    <div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
-                        Назначена
-                      </div>
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {new Date(order.assignedAt).toLocaleString("ru-RU")}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {order.deliveredAt && (
-                  <div className="flex items-start gap-3">
-                    <Calendar className="w-5 h-5 text-green-600 mt-0.5" />
-                    <div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
-                        Доставлена
-                      </div>
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {new Date(order.deliveredAt).toLocaleString("ru-RU")}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {order.totalPrice != null && (
-                  <div className="pt-4 border-t flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                      Стоимость
-                    </span>
-                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                      {order.totalPrice.toLocaleString("ru-RU")} ₽
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {order.driverId && (
-              <Card variant="glass">
-                <CardHeader>
-                  <CardTitle>Водитель</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-                      <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {driver ? (
-                        <>
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            @{driver.slug}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {driver.licenseNumber}
-                          </div>
-                          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                            <span>⭐ {driver.rating.toFixed(1)}</span>
-                            <span className={`px-2 py-0.5 rounded-full font-medium ${
-                              driver.status === "available"
-                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                : driver.status === "on_route"
-                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                            }`}>
-                              {driver.status === "available" ? "Доступен" :
-                               driver.status === "on_route" ? "В пути" : "Не на смене"}
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-sm text-gray-500">
-                          ID: {shortId(order.driverId)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {(order.originAddress || order.destinationAddress) && (
-              <Card variant="glass">
-                <CardHeader>
-                  <CardTitle>Адреса</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
-                    <span className="text-gray-900 dark:text-gray-100 break-words">
-                      {order.originAddress ?? "Со склада"}
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
-                    <span className="text-gray-900 dark:text-gray-100 break-words">
-                      {order.destinationAddress}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Груз и окно забора</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p>{order.cargoDescription || 'Описание не указано'}</p>
+              <p>
+                {order.weightKg ?? '—'} кг · {order.volumeM3 ?? '—'} м³
+              </p>
+              <p>
+                {order.pickupFrom
+                  ? new Date(order.pickupFrom).toLocaleString('ru-RU')
+                  : '—'}{' '}
+                —{' '}
+                {order.pickupTo
+                  ? new Date(order.pickupTo).toLocaleString('ru-RU')
+                  : '—'}
+              </p>
+              <p className="text-lg font-medium">
+                {order.totalPrice == null
+                  ? 'Стоимость не рассчитана'
+                  : `${order.totalPrice.toLocaleString('ru-RU')} ₽`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Процедура перевозки: {order.transportPolicyVersion}
+              </p>
+            </CardContent>
+          </Card>
         </div>
+        <section id="transport" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Реквизиты перевозки</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {order.transportDetails ? (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(['sender', 'recipient', 'carrier'] as const).map(
+                      (key, i) => {
+                        const party = order.transportDetails![key];
+                        return (
+                          <div
+                            key={key}
+                            className="rounded-lg border p-3 text-sm"
+                          >
+                            <p className="text-xs text-muted-foreground">
+                              {['Отправитель', 'Получатель', 'Перевозчик'][i]}
+                            </p>
+                            <strong>{party.name}</strong>
+                            <p>{party.address}</p>
+                            <p>
+                              {party.inn && `ИНН ${party.inn}`}
+                              {party.kpp && ` · КПП ${party.kpp}`}
+                            </p>
+                            <p>
+                              {party.contactName} · {party.phone || party.email}
+                            </p>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                  <p className="text-sm">
+                    {order.transportDetails.basisType === 'contract'
+                      ? 'Договор'
+                      : 'Заявка'}{' '}
+                    № {order.transportDetails.basisNumber} от{' '}
+                    {order.transportDetails.basisDate} · Мест:{' '}
+                    {order.transportDetails.packageCount}
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {order.transportDetails.terms}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Снимок сохранён{' '}
+                    {new Date(order.transportDetails.recordedAt).toLocaleString(
+                      'ru-RU',
+                    )}{' '}
+                    · {order.transportDetails.recordedByUserId}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Реквизиты ещё не сохранены.
+                </p>
+              )}
+              {actions.edit && (transportOpen || !order.transportDetails) && (
+                <TransportDetailsForm
+                  key={order.id}
+                  order={order}
+                  onSaved={() => {
+                    setTransportOpen(false);
+                    state.refresh();
+                  }}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+        <section id="warehouse" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Складские операции</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {retry('operations')}
+              {operations && (
+                <WarehouseOperationsPanel
+                  order={order}
+                  operations={operations}
+                  assignment={assignment}
+                  actions={actions}
+                  busy={busy}
+                  command={command}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+        <section id="incidents" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Проблемы перевозки</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {retry('incidents')}
+              {incidents && (
+                <OrderIncidentsPanel
+                  order={order}
+                  incidents={incidents}
+                  assignment={assignment}
+                  actor={actor}
+                  canCreate={actions.reportIncident}
+                  busy={busy}
+                  command={command}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+        <section id="receipt" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Фактическая приёмка</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {retry('receipt')}
+              {receipt !== undefined && (
+                <DeliveryReceiptPanel
+                  order={order}
+                  assignment={assignment}
+                  receipt={receipt}
+                  canCreate={actions.receipt}
+                  busy={busy}
+                  command={command}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Управление назначением</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AssignmentPanel
+              order={order}
+              assignment={assignment}
+              canAssign={actions.assign}
+              canAccept={actions.accept}
+              canReject={actions.reject}
+              busy={busy}
+              command={command}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {user?.role === 'driver'
+                ? 'Мои назначения'
+                : 'История назначений'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {user?.role === 'client' ? (
+              <p className="text-sm">
+                Полная история назначений доступна диспетчеру.
+              </p>
+            ) : (
+              assignments && <AssignmentHistory assignments={assignments} />
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Передачи груза в пути</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TripHandoversPanel
+              order={order}
+              assignments={assignments ?? noAssignments}
+              actor={actor}
+              canCreate={actions.handover}
+              busy={busy}
+              command={command}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Документы заказа</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrderDocumentsPanel orderId={order.id} />
+          </CardContent>
+        </Card>
+        <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Отменить заказ?</DialogTitle>
+              <DialogDescription>
+                Принятый складом груз останется в очереди до выдачи отправителю.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              maxLength={2000}
+              placeholder="Причина отмены"
+              aria-label="Причина отмены"
+              value={cancelComment}
+              onChange={(e) => setCancelComment(e.target.value)}
+            />
+            <Button
+              variant="destructive"
+              disabled={busy || !actions.cancel}
+              onClick={async () => {
+                if (
+                  await command(
+                    (token) =>
+                      api.orders.cancel(token, order.id, {
+                        comment: cancelComment.trim(),
+                      }),
+                    'Заказ отменён',
+                  )
+                )
+                  setCancelOpen(false);
+              }}
+            >
+              Подтвердить отмену
+            </Button>
+          </DialogContent>
+        </Dialog>
       </div>
-
-      <Dialog open={isCancelOpen} onOpenChange={setIsCancelOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Отменить заявку?</DialogTitle>
-            <DialogDescription>
-              Это действие нельзя отменить. Заявка будет помечена как отменённая.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2 justify-end">
-            <Button variant="glass_outline_easy" onClick={() => setIsCancelOpen(false)}>
-              Назад
-            </Button>
-            <Button variant="destructive" onClick={handleCancel} disabled={isCancelling}>
-              {isCancelling ? "Отмена..." : "Отменить заявку"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }

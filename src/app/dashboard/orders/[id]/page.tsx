@@ -1,3 +1,4 @@
+import { MultiRoleAuthGuard } from "@/components/AuthGuard";
 import { OrderDetailsPage } from '@/components/OrderDetailsPage';
 
 interface Props {
@@ -11,5 +12,5 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function OrderPage({ params }: Props) {
   const { id } = await params;
-  return <OrderDetailsPage orderId={id} />;
+  return <MultiRoleAuthGuard allowedRoles={["client", "driver", "manager", "admin"]}><OrderDetailsPage key={id} orderId={id} /></MultiRoleAuthGuard>;
 }

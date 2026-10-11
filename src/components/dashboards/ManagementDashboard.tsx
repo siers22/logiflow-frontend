@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
   TrendingDown,
-  DollarSign,
   Package,
   Users,
   Calendar,
@@ -118,7 +117,7 @@ export function ManagementDashboard() {
   if (!user) return null;
 
   const totalRevenue = orders.reduce((s, o) => s + (o.totalPrice ?? 0), 0);
-  const completedOrders = orders.filter((o) => o.status === "delivered").length;
+  const completedOrders = orders.filter((o) => o.status === "completed").length;
   const activeOrders = orders.filter(
     (o) => o.status === "in_transit" || o.status === "assigned",
   ).length;
@@ -131,7 +130,7 @@ export function ManagementDashboard() {
     { name: "В пути", value: activeOrders, color: "#3b82f6" },
     {
       name: "Ожидает",
-      value: orders.filter((o) => o.status === "pending").length,
+      value: orders.filter((o) => o.status === "draft" || o.status === "ready_for_dispatch").length,
       color: "#f59e0b",
     },
     {
@@ -146,7 +145,7 @@ export function ManagementDashboard() {
   // топ водителей по числу доставленных заявок в этом периоде
   const driverOrderCount: Record<string, number> = {};
   orders.forEach((o) => {
-    if (o.status === "delivered" && o.driverId) {
+    if (o.status === "completed" && o.driverId) {
       driverOrderCount[o.driverId] = (driverOrderCount[o.driverId] ?? 0) + 1;
     }
   });

@@ -1,39 +1,60 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { MapPin, Package, Settings, User, IdCard, Car } from "lucide-react";
-import { toast } from "sonner";
-import { DashboardLayout } from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
+import Link from 'next/link';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  MapPin,
+  Package,
+  Settings,
+  User,
+  IdCard,
+  Car,
+  Star,
+  Ruler,
+  Timer,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { RoleBadge, StatusBadge } from "@/components/ui/badge";
+} from '@/components/ui/card';
+import { RoleBadge, StatusBadge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { useUser } from "@/lib/UserContext";
-import { api, type Driver, type DriverStatus, type Order, type Route, type Vehicle } from "@/lib/api";
-import { RouteMap } from "@/components/RouteMap";
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { useWorkspace } from '@/lib/WorkspaceContext';
+import { useUser } from '@/lib/UserContext';
+import {
+  api,
+  type Assignment,
+  type DriverStatus,
+  type Order,
+  type Route,
+  type Vehicle,
+} from '@/lib/api';
+import { RouteMap } from '@/components/RouteMap';
+import { RoleFeatureCard } from '@/components/new/RoleFeatureCard';
 
 const statusColors: Record<DriverStatus, string> = {
-  available: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  on_route: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  off_duty: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+  available:
+    'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  on_route: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  off_duty: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
 };
 const statusLabels: Record<DriverStatus, string> = {
-  available: "Доступен",
-  on_route: "В пути",
-  off_duty: "Не на смене",
+  available: 'Доступен',
+  on_route: 'В пути',
+  off_duty: 'Не на смене',
 };
 
 function shortId(id: string) {
@@ -42,149 +63,145 @@ function shortId(id: string) {
 
 export function DriverDashboard() {
   const { user, withAuth } = useUser();
-  const [driver, setDriver] = useState<Driver | null>(null);
-  const [driverStatus, setDriverStatus] = useState<DriverStatus>("off_duty");
+  const workspace = useWorkspace();
+  const driver = workspace.driver;
+  const [driverStatus, setDriverStatus] = useState<DriverStatus>('off_duty');
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [route, setRoute] = useState<Route | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const wsRef = useRef<WebSocket | null>(null);
 
-  const loadVehicle = useCallback((vehicleId: string) => {
-    withAuth((token) => api.vehicles.list(token))
-      .then((list) => {
-        const found = list.find((v) => v.id === vehicleId);
-        if (found) setVehicle(found);
-      })
-      .catch(() => {});
-  }, [withAuth]);
+  const loadVehicle = useCallback(
+    (vehicleId: string) => {
+      withAuth((token) => api.vehicles.list(token))
+        .then((list) => {
+          const found = list.find((v) => v.id === vehicleId);
+          if (found) setVehicle(found);
+        })
+        .catch(() => {});
+    },
+    [withAuth],
+  );
 
   useEffect(() => {
-    if (!user?.id) return;
-    withAuth((token) => api.drivers.get(token, user.slug ?? user.id))
-      .then((d) => {
-        setDriver(d);
-        setDriverStatus(d.status);
-        if (d.vehicleId) loadVehicle(d.vehicleId);
-      })
-      .catch(() =>
-        withAuth((token) => api.drivers.list(token))
-          .then((list) => {
-            const mine = list.find((d) => d.userId === user.id);
-            if (mine) {
-              setDriver(mine);
-              setDriverStatus(mine.status);
-              if (mine.vehicleId) loadVehicle(mine.vehicleId);
-            }
-          })
-          .catch(() => {}),
-      );
-  }, [user?.id, user?.slug, withAuth]);
+    if (driver) setDriverStatus(driver.status);
+  }, [driver]);
 
   const loadOrders = useCallback(() => {
     if (!driver) return;
     setIsLoadingOrders(true);
-    withAuth((token) => api.orders.list(token, { driverId: driver.id }))
-      .then(setOrders)
+    Promise.all([
+      withAuth((token) => api.orders.list(token)),
+      withAuth((token) => api.assignments.list(token)),
+    ])
+      .then(([nextOrders, nextAssignments]) => {
+        setOrders(nextOrders);
+        setAssignments(nextAssignments);
+      })
       .catch(() => {})
       .finally(() => setIsLoadingOrders(false));
   }, [driver, withAuth]);
 
   useEffect(() => {
     loadOrders();
+    const tick = () => {
+      if (!document.hidden) loadOrders();
+    };
+    const timer = window.setInterval(tick, 15000);
+    return () => window.clearInterval(timer);
   }, [loadOrders]);
 
   const activeOrder = orders.find(
-    (o) => o.status === "in_transit" || o.status === "assigned",
+    (o) =>
+      assignments.some(
+        (a) =>
+          a.orderId === o.id &&
+          a.driverId === driver?.id &&
+          ['accepted', 'active'].includes(a.status),
+      ) && ['assigned', 'in_transit', 'arrived'].includes(o.status),
+  );
+  const activeAssignment = assignments.find(
+    (a) =>
+      a.orderId === activeOrder?.id &&
+      (a.status === 'accepted' || a.status === 'active'),
+  );
+  useEffect(() => {
+    if (activeAssignment?.vehicleId) loadVehicle(activeAssignment.vehicleId);
+    else if (driver?.vehicleId) loadVehicle(driver.vehicleId);
+    else setVehicle(null);
+  }, [activeAssignment?.vehicleId, driver?.vehicleId, loadVehicle]);
+  const pendingAssignments = assignments.filter(
+    (a) => a.status === 'pending_acceptance',
   );
 
-  // Загружаем маршрут и подключаем WebSocket для активного заказа
+  const activeOrderId = activeOrder?.id,
+    activeOrderStatus = activeOrder?.status;
+  // Poll through the authenticated REST route while the order is in transit.
   useEffect(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
     setRoute(null);
     setCurrentIndex(0);
 
-    if (!activeOrder) return;
+    if (!activeOrderId) return;
 
-    withAuth((token) => api.routes.get(token, activeOrder.id))
-      .then((r) => {
-        setRoute(r);
-        setCurrentIndex(r.currentIndex);
-      })
-      .catch(() => {});
-
-    let ws: WebSocket | null = null;
-    withAuth(async (token) => {
-      ws = api.routes.connectWs(activeOrder.id, token, (pos) => {
-        setCurrentIndex(pos.currentIndex);
-      });
-      wsRef.current = ws;
-    }).catch(() => {});
-
-    return () => {
-      ws?.close();
-      wsRef.current = null;
+    let busy = false,
+      live = true;
+    const refreshRoute = () => {
+      if (busy || document.hidden) return;
+      busy = true;
+      withAuth((token) => api.routes.get(token, activeOrderId))
+        .then((r) => {
+          if (live) {
+            setRoute(r);
+            setCurrentIndex(r.currentIndex);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          busy = false;
+        });
     };
-  }, [activeOrder?.id, activeOrder?.status, withAuth]);
+    refreshRoute();
+    const timer =
+      activeOrderStatus === 'in_transit'
+        ? window.setInterval(refreshRoute, 10000)
+        : null;
+    return () => {
+      live = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [activeOrderId, activeOrderStatus, withAuth]);
 
   const handleStatusChange = async (newStatus: DriverStatus) => {
     const prev = driverStatus;
     setDriverStatus(newStatus);
     try {
       await withAuth((token) => api.drivers.updateMyStatus(token, newStatus));
-      if (driver) setDriver({ ...driver, status: newStatus });
+      workspace.reload();
       toast.success(`Статус изменён: ${statusLabels[newStatus]}`);
     } catch (err: unknown) {
       setDriverStatus(prev);
-      toast.error((err as Error).message ?? "Не удалось изменить статус");
-    }
-  };
-
-  const handleCompleteDelivery = async (order: Order) => {
-    try {
-      const updated = await withAuth((token) =>
-        api.orders.updateStatus(token, order.id, { status: "delivered" }),
-      );
-      setOrders((prev) =>
-        prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "delivered" } : o)),
-      );
-      // Автоматически переводим водителя в "доступен"
-      await withAuth((token) => api.drivers.updateMyStatus(token, "available")).catch(() => {});
-      setDriverStatus("available");
-      if (driver) setDriver({ ...driver, status: "available" });
-      toast.success("Доставка завершена");
-    } catch (err: unknown) {
-      toast.error((err as Error).message ?? "Не удалось завершить доставку");
-    }
-  };
-
-  const handleStartDelivery = async (order: Order) => {
-    try {
-      const updated = await withAuth((token) =>
-        api.orders.updateStatus(token, order.id, { status: "in_transit" }),
-      );
-      setOrders((prev) =>
-        prev.map((o) => (o.id === order.id ? updated ?? { ...o, status: "in_transit" } : o)),
-      );
-      // Автоматически переводим водителя в "в пути"
-      await withAuth((token) => api.drivers.updateMyStatus(token, "on_route")).catch(() => {});
-      setDriverStatus("on_route");
-      if (driver) setDriver({ ...driver, status: "on_route" });
-      toast.success("Доставка начата");
-    } catch (err: unknown) {
-      toast.error((err as Error).message ?? "Не удалось обновить статус");
+      toast.error((err as Error).message ?? 'Не удалось изменить статус');
     }
   };
 
   if (!user) return null;
 
-  const completedOrders = orders.filter((o) => o.status === "delivered");
+  const completedOrders = orders.filter(
+    (o) =>
+      o.status === 'completed' ||
+      assignments.some(
+        (a) =>
+          a.orderId === o.id &&
+          a.startedAt &&
+          ['released', 'completed'].includes(a.status),
+      ),
+  );
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="role-dashboard driver-dashboard space-y-6">
         {/* Заголовок */}
         <div className="flex items-center justify-between">
           <div>
@@ -195,7 +212,9 @@ export function DriverDashboard() {
               Добро пожаловать, {user.name}
             </p>
           </div>
-          <div className={`px-4 py-2 rounded-lg text-sm font-medium ${statusColors[driverStatus]}`}>
+          <div
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${statusColors[driverStatus]}`}
+          >
             {statusLabels[driverStatus]}
           </div>
         </div>
@@ -223,11 +242,11 @@ export function DriverDashboard() {
           <Card variant="glass">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Рейтинг</CardTitle>
-              <span className="text-yellow-500">⭐</span>
+              <Star className="w-4 h-4 text-violet-500" aria-hidden="true" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {driver ? driver.rating.toFixed(1) : "—"}
+                {driver ? driver.rating.toFixed(1) : '—'}
               </div>
             </CardContent>
           </Card>
@@ -238,10 +257,13 @@ export function DriverDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {driver ? driver.licenseNumber : "—"}
+                {driver ? driver.licenseNumber : '—'}
               </div>
               {driver && (
-                <p className="text-xs text-gray-500">до {driver.licenseExpiry}</p>
+                <p className="text-xs text-gray-500">
+                  до{' '}
+                  {new Date(driver.licenseExpiry).toLocaleDateString('ru-RU')}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -258,21 +280,21 @@ export function DriverDashboard() {
                   </div>
                   {(vehicle.brand || vehicle.model) && (
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {[vehicle.brand, vehicle.model].filter(Boolean).join(" ")}
-                      {vehicle.year ? ` (${vehicle.year})` : ""}
+                      {[vehicle.brand, vehicle.model].filter(Boolean).join(' ')}
+                      {vehicle.year ? ` (${vehicle.year})` : ''}
                     </div>
                   )}
                   {(vehicle.capacityKg || vehicle.capacityM3) && (
                     <div className="text-xs text-gray-400 mt-1">
-                      {vehicle.capacityKg ? `${vehicle.capacityKg} кг` : ""}
-                      {vehicle.capacityKg && vehicle.capacityM3 ? " • " : ""}
-                      {vehicle.capacityM3 ? `${vehicle.capacityM3} м³` : ""}
+                      {vehicle.capacityKg ? `${vehicle.capacityKg} кг` : ''}
+                      {vehicle.capacityKg && vehicle.capacityM3 ? ' • ' : ''}
+                      {vehicle.capacityM3 ? `${vehicle.capacityM3} м³` : ''}
                     </div>
                   )}
                 </>
               ) : (
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {driver ? (driver.vehicleId ? "Загрузка..." : "Нет ТС") : "—"}
+                  {driver ? (driver.vehicleId ? 'Загрузка...' : 'Нет ТС') : '—'}
                 </div>
               )}
             </CardContent>
@@ -309,6 +331,42 @@ export function DriverDashboard() {
           </CardContent>
         </Card>
 
+        <Card variant="glass">
+          <CardHeader>
+            <CardTitle>Предложения рейсов</CardTitle>
+            <CardDescription>
+              Подтвердите назначение до истечения срока
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingAssignments.length === 0 ? (
+              <p className="text-sm text-gray-500">Новых предложений нет</p>
+            ) : (
+              pendingAssignments.map((assignment) => (
+                <div
+                  key={assignment.id}
+                  className="border rounded-lg p-3 flex items-center justify-between gap-3"
+                >
+                  <div className="text-sm">
+                    Заказ #{shortId(assignment.orderId)}
+                    <div className="text-xs text-gray-500">
+                      До{' '}
+                      {new Date(assignment.offerExpiresAt).toLocaleString(
+                        'ru-RU',
+                      )}
+                    </div>
+                  </div>
+                  <Button asChild>
+                    <Link href={`/dashboard/orders/${assignment.orderId}`}>
+                      Открыть предложение
+                    </Link>
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
         {/* Текущий рейс */}
         {activeOrder && (
           <Card variant="glass">
@@ -327,13 +385,15 @@ export function DriverDashboard() {
                       <StatusBadge status={activeOrder.status} />
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {activeOrder.cargoDescription ?? "Без описания"}
-                      {activeOrder.weightKg ? ` • ${activeOrder.weightKg} кг` : ""}
+                      {activeOrder.cargoDescription ?? 'Без описания'}
+                      {activeOrder.weightKg
+                        ? ` • ${activeOrder.weightKg} кг`
+                        : ''}
                     </p>
                   </div>
                   {activeOrder.totalPrice != null && (
                     <div className="font-medium text-gray-900 dark:text-gray-100">
-                      {activeOrder.totalPrice.toLocaleString("ru-RU")} ₽
+                      {activeOrder.totalPrice.toLocaleString('ru-RU')} ₽
                     </div>
                   )}
                 </div>
@@ -343,7 +403,7 @@ export function DriverDashboard() {
                     <div>
                       <p className="text-xs text-gray-500">Забрать:</p>
                       <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {activeOrder.originAddress ?? "Со склада"}
+                        {activeOrder.originAddress ?? 'Со склада'}
                       </p>
                     </div>
                   </div>
@@ -360,43 +420,61 @@ export function DriverDashboard() {
 
                 {route && route.coordinates.length >= 2 ? (
                   <div>
-                    <RouteMap coordinates={route.coordinates} currentIndex={currentIndex} />
+                    <RouteMap
+                      coordinates={route.coordinates}
+                      currentIndex={currentIndex}
+                    />
                     <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                      <span>📏 {route.distanceKm.toFixed(1)} км</span>
-                      <span>⏱ {Math.round(route.durationSec / 60)} мин</span>
-                      {activeOrder.status === "in_transit" && (
-                        <span className="text-blue-500 dark:text-blue-400 animate-pulse">● Live</span>
+                      <span className="inline-flex items-center gap-1">
+                        <Ruler className="w-3 h-3" aria-hidden="true" />
+                        {route.distanceKm?.toFixed(1) ?? '—'} км
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Timer className="w-3 h-3" aria-hidden="true" />
+                        {route.durationSec == null
+                          ? '—'
+                          : Math.round(route.durationSec / 60)}{' '}
+                        мин
+                      </span>
+                      {activeOrder.status === 'in_transit' && (
+                        <span className="text-blue-500 dark:text-blue-400 animate-pulse">
+                          Данные маршрута
+                        </span>
                       )}
                     </div>
                   </div>
                 ) : null}
 
                 <div className="pt-4 border-t flex gap-2">
-                  {activeOrder.status === "assigned" && (
-                    <Button
-                      className="flex-1"
-                      variant="glass_outline_easy"
-                      onClick={() => handleStartDelivery(activeOrder)}
-                    >
-                      Начать доставку
-                    </Button>
-                  )}
-                  {activeOrder.status === "in_transit" && (
-                    <Button
-                      className="flex-1"
-                      onClick={() => handleCompleteDelivery(activeOrder)}
-                    >
-                      Завершить доставку
-                    </Button>
-                  )}
+                  <Button asChild className="flex-1">
+                    <Link href={`/dashboard/orders/${activeOrder.id}`}>
+                      Открыть рейс и действия
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
 
+        <RoleFeatureCard
+          className="role-feature"
+          eyebrow="МОЙ ТРАНСПОРТ"
+          title={
+            vehicle
+              ? [vehicle.brand, vehicle.model].filter(Boolean).join(' ') ||
+                'Транспорт назначен'
+              : 'Ожидание транспорта'
+          }
+          description={
+            vehicle
+              ? `${vehicle.plateNumber} · ${vehicle.capacityKg ?? '—'} кг`
+              : 'После назначения автомобиля его данные появятся здесь.'
+          }
+        />
+
         {/* История */}
-        <Card variant="glass">
+        <Card variant="glass" className="driver-history">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="w-5 h-5" /> История поездок
@@ -406,9 +484,13 @@ export function DriverDashboard() {
           <CardContent>
             <div className="space-y-3 max-h-[380px] overflow-y-auto">
               {isLoadingOrders ? (
-                <p className="text-gray-400 text-center py-4 text-sm">Загрузка...</p>
+                <p className="text-gray-400 text-center py-4 text-sm">
+                  Загрузка...
+                </p>
               ) : completedOrders.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">Нет завершённых поездок</p>
+                <p className="text-gray-500 text-center py-4">
+                  Нет завершённых поездок
+                </p>
               ) : (
                 completedOrders.map((order) => (
                   <div key={order.id} className="border rounded-lg p-3">
@@ -418,19 +500,21 @@ export function DriverDashboard() {
                           #{shortId(order.id)}
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {order.cargoDescription ?? "Без описания"}
+                          {order.cargoDescription ?? 'Без описания'}
                         </p>
                       </div>
-                      <StatusBadge status="delivered" />
+                      <StatusBadge status="completed" />
                     </div>
                     {order.deliveredAt && (
                       <p className="text-xs text-gray-500">
-                        {new Date(order.deliveredAt).toLocaleDateString("ru-RU")}
+                        {new Date(order.deliveredAt).toLocaleDateString(
+                          'ru-RU',
+                        )}
                       </p>
                     )}
                     {order.totalPrice != null && (
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">
-                        {order.totalPrice.toLocaleString("ru-RU")} ₽
+                        {order.totalPrice.toLocaleString('ru-RU')} ₽
                       </p>
                     )}
                   </div>

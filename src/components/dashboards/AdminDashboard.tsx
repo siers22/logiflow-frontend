@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { CreateOrderButton } from "@/components/orders/CreateOrderButton";
 
 import { useState, useEffect } from "react";
 import {
@@ -14,6 +16,7 @@ import {
   Box,
   Plus,
   Trash2,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -54,6 +57,7 @@ import {
   type VehicleCreate,
   type Order,
   type Manager,
+  type Warehouse,
 } from "@/lib/api";
 
 function EmptyState({
@@ -160,6 +164,7 @@ export function AdminDashboard() {
 
   // ── Managers ──────────────────────────────────────────────────────────────
   const [managers, setManagers] = useState<Manager[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [managersLoading, setManagersLoading] = useState(true);
   const [deleteManagerTarget, setDeleteManagerTarget] =
     useState<Manager | null>(null);
@@ -169,8 +174,13 @@ export function AdminDashboard() {
     email: string;
     password: string;
     fullName: string;
-  }>({ email: "", password: "", fullName: "" });
+    warehouseId: string;
+  }>({ email: "", password: "", fullName: "", warehouseId: "" });
   const [isCreatingManager, setIsCreatingManager] = useState(false);
+
+  useEffect(() => {
+    withAuth((token) => api.warehouses.list(token)).then(setWarehouses).catch(() => {});
+  }, [withAuth]);
 
   // ── Settings ─────────────────────────────────────────────────────────────
   const [company, setCompany] = useState("LogiFlow");
@@ -206,8 +216,7 @@ export function AdminDashboard() {
       !driverForm.password ||
       !driverForm.fullName ||
       !driverForm.licenseNumber ||
-      !driverForm.licenseExpiry ||
-      !driverForm.vehicleId
+      !driverForm.licenseExpiry
     )
       return;
     setIsCreatingDriver(true);
@@ -219,7 +228,7 @@ export function AdminDashboard() {
           fullName: driverForm.fullName!,
           licenseNumber: driverForm.licenseNumber!,
           licenseExpiry: driverForm.licenseExpiry!,
-          vehicleId: driverForm.vehicleId!,
+          vehicleId: driverForm.vehicleId ?? null,
         }),
       );
       setDrivers((prev) => [...prev, created]);
@@ -319,7 +328,7 @@ export function AdminDashboard() {
   };
 
   const handleCreateManager = async () => {
-    if (!managerForm.email || !managerForm.password || !managerForm.fullName)
+    if (!managerForm.email || !managerForm.password || !managerForm.fullName || !managerForm.warehouseId)
       return;
     setIsCreatingManager(true);
     try {
@@ -328,11 +337,12 @@ export function AdminDashboard() {
           email: managerForm.email,
           password: managerForm.password,
           fullName: managerForm.fullName,
+          warehouseId: managerForm.warehouseId,
         }),
       );
       setManagers((prev) => [...prev, created]);
       setIsCreateManagerOpen(false);
-      setManagerForm({ email: "", password: "", fullName: "" });
+      setManagerForm({ email: "", password: "", fullName: "", warehouseId: "" });
       toast.success("Менеджер добавлен");
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Не удалось создать менеджера");
@@ -366,14 +376,14 @@ export function AdminDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="operations-dashboard space-y-6">
         {/* Заголовок */}
         <div>
           <h1 className="text-gray-900 dark:text-gray-100">
-            Панель администратора
+            Операции
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Добро пожаловать, {user.name}
+            Заказы, транспорт и команда
           </p>
         </div>
 
@@ -451,7 +461,7 @@ export function AdminDashboard() {
         </div>
 
         {/* Вкладки */}
-        <Tabs defaultValue="drivers" className="space-y-6">
+        <Tabs defaultValue="orders" className="space-y-6">
           <TabsList>
             <TabsTrigger variant="glass" value="orders">
               <ClipboardCheck className="w-4 h-4 mr-2" /> Заказы
@@ -475,6 +485,7 @@ export function AdminDashboard() {
             <Card variant="glass">
               <CardHeader>
                 <CardTitle>Все заказы</CardTitle>
+                <CreateOrderButton />
                 <CardDescription>
                   {ordersLoading
                     ? "Загрузка..."
@@ -501,9 +512,9 @@ export function AdminDashboard() {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                            <Link className="font-medium text-sm text-gray-900 dark:text-gray-100 underline" href={`/dashboard/orders/${order.id}`}>
                               #{order.id.slice(0, 8).toUpperCase()}
-                            </span>
+                            </Link>
                             <p className="text-xs text-gray-500 mt-0.5">
                               {order.cargoDescription ?? "Без описания"}
                               {order.weightKg ? ` • ${order.weightKg} кг` : ""}
@@ -516,7 +527,7 @@ export function AdminDashboard() {
                           <div className="text-right">
                             <span
                               className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                order.status === "delivered"
+                                order.status === "completed"
                                   ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                                   : order.status === "in_transit"
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
@@ -527,15 +538,19 @@ export function AdminDashboard() {
                                         : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
                               }`}
                             >
-                              {order.status === "pending"
-                                ? "Ожидает"
+                              {order.status === "draft"
+                                ? "Черновик"
+                                : order.status === "ready_for_dispatch"
+                                  ? "На распределении"
                                 : order.status === "assigned"
                                   ? "Назначен"
                                   : order.status === "in_transit"
                                     ? "В пути"
-                                    : order.status === "delivered"
+                                    : order.status === "completed"
                                       ? "Доставлен"
-                                      : "Отменён"}
+                                      : order.status === "arrived"
+                                        ? "Прибыл"
+                                        : "Отменён"}
                             </span>
                             {order.totalPrice != null && (
                               <p className="text-xs text-gray-500 mt-1">
@@ -696,20 +711,13 @@ export function AdminDashboard() {
                       setDriverForm({});
                       setIsCreateDriverOpen(true);
                     }}
-                    disabled={availableVehicles.length === 0}
-                    title={
-                      availableVehicles.length === 0
-                        ? "Сначала добавьте свободное ТС"
-                        : undefined
-                    }
                   >
                     <Plus className="w-4 h-4 mr-2" /> Добавить водителя
                   </Button>
                 </div>
                 {availableVehicles.length === 0 && !vehiclesLoading && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                    Нет свободных ТС — сначала добавьте транспортное средство во
-                    вкладке ТС
+                    Транспорт можно назначить водителю позже.
                   </p>
                 )}
               </CardHeader>
@@ -768,7 +776,7 @@ export function AdminDashboard() {
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
                               <span className="text-xs text-gray-500">
-                                ⭐ {driver.rating.toFixed(1)}
+                                <Star className="inline w-3 h-3 text-violet-500" aria-hidden="true" /> {driver.rating.toFixed(1)}
                               </span>
                               <Select
                                 value={driver.status}
@@ -824,7 +832,7 @@ export function AdminDashboard() {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setManagerForm({ email: "", password: "", fullName: "" });
+                      setManagerForm({ email: "", password: "", fullName: "", warehouseId: "" });
                       setIsCreateManagerOpen(true);
                     }}
                   >
@@ -1112,7 +1120,7 @@ export function AdminDashboard() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Транспортное средство *</Label>
+              <Label>Транспортное средство (необязательно)</Label>
               <Select
                 value={driverForm.vehicleId ?? ""}
                 onValueChange={(v) =>
@@ -1152,8 +1160,7 @@ export function AdminDashboard() {
                   !driverForm.password ||
                   !driverForm.fullName ||
                   !driverForm.licenseNumber ||
-                  !driverForm.licenseExpiry ||
-                  !driverForm.vehicleId
+                  !driverForm.licenseExpiry
                 }
               >
                 {isCreatingDriver ? "Создание..." : "Создать"}
@@ -1237,6 +1244,13 @@ export function AdminDashboard() {
                 }
               />
             </div>
+            <div className="space-y-2">
+              <Label>Склад *</Label>
+              <Select value={managerForm.warehouseId} onValueChange={(v) => setManagerForm((f) => ({ ...f, warehouseId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Выберите склад" /></SelectTrigger>
+                <SelectContent>{warehouses.filter((w) => w.status === "active").map((w) => <SelectItem key={w.id} value={w.id}>{w.name} — {w.address}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2 justify-end">
               <Button
                 variant="glass_outline_easy"
@@ -1251,6 +1265,7 @@ export function AdminDashboard() {
                   !managerForm.email ||
                   !managerForm.password ||
                   !managerForm.fullName
+                  || !managerForm.warehouseId
                 }
               >
                 {isCreatingManager ? "Создание..." : "Создать"}

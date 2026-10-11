@@ -14,23 +14,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge, RoleBadge, StatusBadge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import { CreateOrderButton } from "@/components/orders/CreateOrderButton";
+import { useWorkspace } from "@/lib/WorkspaceContext";
+import { planningActor } from "@/lib/order-actions";
 import { useUser } from "@/lib/UserContext";
-import { api, type Driver, type Order } from "@/lib/api";
+import { api, type Driver, type Order, type Assignment } from "@/lib/api";
 
 function shortId(id: string) {
   return id.slice(0, 8).toUpperCase();
@@ -39,23 +27,22 @@ function shortId(id: string) {
 export function ManagerDashboard() {
   const { user, withAuth } = useUser();
   const router = useRouter();
+  const workspace = useWorkspace();
   const [orders, setOrders] = useState<Order[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [selectedDriverId, setSelectedDriverId] = useState("");
-  const [isAssigning, setIsAssigning] = useState(false);
-
   const loadData = useCallback(() => {
     setIsLoading(true);
     Promise.all([
       withAuth((token) => api.orders.list(token)),
       withAuth((token) => api.drivers.list(token)),
+      withAuth((token) => api.assignments.list(token)),
     ])
-      .then(([ordersRes, driversRes]) => {
+      .then(([ordersRes, driversRes, assignmentsRes]) => {
         setOrders(ordersRes);
         setDrivers(driversRes);
+        setAssignments(assignmentsRes);
       })
       .catch((err: Error) => toast.error(err.message ?? "Не удалось загрузить данные"))
       .finally(() => setIsLoading(false));
@@ -63,47 +50,20 @@ export function ManagerDashboard() {
 
   useEffect(() => {
     loadData();
+    const tick = () => { if (!document.hidden) loadData(); };
+    const timer = window.setInterval(tick, 15000);
+    return () => window.clearInterval(timer);
   }, [loadData]);
 
   if (!user) return null;
 
-  const pendingOrders = orders.filter((o) => o.status === "pending");
+  const pendingOrders = orders.filter((o) => o.status === "ready_for_dispatch" && planningActor(o, { id: user.id, role: user.role, warehouseId: workspace.manager?.warehouseId }));
   const activeOrders = orders.filter(
-    (o) => o.status === "assigned" || o.status === "in_transit",
+    (o) => o.status === "assigned" || o.status === "in_transit" || o.status === "arrived",
   );
   const availableDrivers = drivers.filter((d) => d.status === "available");
 
-  const handleAssign = async () => {
-    if (!selectedOrder || !selectedDriverId) return;
-    setIsAssigning(true);
-    try {
-      const updated = await withAuth((token) =>
-        api.orders.updateStatus(token, selectedOrder.id, {
-          status: "assigned",
-          driverId: selectedDriverId,
-        }),
-      );
-      setOrders((prev) =>
-        prev.map((o) => (o.id === selectedOrder.id ? updated ?? { ...o, status: "assigned", driverId: selectedDriverId } : o)),
-      );
-      setDrivers((prev) =>
-        prev.map((d) => (d.id === selectedDriverId ? { ...d, status: "on_route" } : d)),
-      );
-      toast.success("Водитель назначен");
-      setIsAssignOpen(false);
-      setSelectedOrder(null);
-      setSelectedDriverId("");
-    } catch (err: unknown) {
-      toast.error((err as Error).message ?? "Не удалось назначить водителя");
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
-  const openAssign = (order: Order) => {
-    setSelectedOrder(order);
-    setIsAssignOpen(true);
-  };
+  const openAssign = (order: Order) => router.push(`/dashboard/orders/${order.id}`);
 
   return (
     <DashboardLayout>
@@ -116,6 +76,8 @@ export function ManagerDashboard() {
           </p>
         </div>
 
+        <CreateOrderButton />
+        {workspace.error && <p role="alert">{workspace.error} <Button variant="outline" onClick={workspace.reload}>Повторить</Button></p>}
         {/* Профиль */}
         <Card variant="glass">
           <CardContent className="pt-6">
@@ -205,7 +167,7 @@ export function ManagerDashboard() {
                             {new Date(order.createdAt).toLocaleString("ru-RU")}
                           </p>
                         </div>
-                        <StatusBadge status="pending" />
+                        <StatusBadge status={order.status} />
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {order.cargoDescription ?? "Без описания"}
@@ -214,7 +176,12 @@ export function ManagerDashboard() {
                       <p className="text-xs text-gray-500 mb-3">
                         {(order.originAddress ?? "Со склада")} → {order.destinationAddress}
                       </p>
-                      {availableDrivers.length === 0 ? (
+                      {assignments.some((a) => a.orderId === order.id && a.status === "pending_acceptance") && (
+                        <p className="text-xs text-amber-600 mb-2">Ожидает ответа водителя</p>
+                      )}
+                      {assignments.some((a) => a.orderId === order.id && a.status === "pending_acceptance") ? (
+                        <p className="text-xs text-center text-amber-600 py-1">Ожидаем решения водителя</p>
+                      ) : availableDrivers.length === 0 ? (
                         <p className="text-xs text-center text-gray-400 py-1">
                           Нет свободных водителей
                         </p>
@@ -336,61 +303,7 @@ export function ManagerDashboard() {
       </div>
 
       {/* Диалог назначения */}
-      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Назначить водителя</DialogTitle>
-            <DialogDescription>
-              {selectedOrder && `Заявка #${shortId(selectedOrder.id)}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {selectedOrder && (
-              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">
-                  {selectedOrder.cargoDescription ?? "Без описания"}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {selectedOrder.weightKg != null && `${selectedOrder.weightKg} кг`}
-                  {selectedOrder.volumeM3 != null && ` • ${selectedOrder.volumeM3} м³`}
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  {(selectedOrder.originAddress ?? "Со склада")} → {selectedOrder.destinationAddress}
-                </p>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Водитель</Label>
-              <Select
-                value={selectedDriverId}
-                onValueChange={setSelectedDriverId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите водителя" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDrivers.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.licenseNumber} — ⭐ {d.rating.toFixed(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="glass_outline_easy"
-                onClick={() => setIsAssignOpen(false)}
-              >
-                Отмена
-              </Button>
-              <Button onClick={handleAssign} disabled={!selectedDriverId || isAssigning}>
-                {isAssigning ? "Назначение..." : "Назначить"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </DashboardLayout>
   );
 }

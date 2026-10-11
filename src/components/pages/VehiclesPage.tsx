@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { useUser } from "@/lib/UserContext";
 import { api } from "@/lib/api";
-import type { Vehicle, VehicleCreate, VehicleUpdate } from "@/lib/api";
+import type { Vehicle, VehicleCreate, VehicleUpdate, VehicleDocument } from "@/lib/api";
 
 const STATUS_CONFIG: Record<
   Vehicle["status"],
@@ -80,6 +80,10 @@ export function VehiclesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<Partial<VehicleCreate & VehicleUpdate>>({});
+  const [documentVehicle, setDocumentVehicle] = useState<Vehicle | null>(null);
+  const [documents, setDocuments] = useState<VehicleDocument[]>([]);
+  const [documentNumber, setDocumentNumber] = useState("");
+  const [documentDate, setDocumentDate] = useState("");
 
   useEffect(() => {
     withAuth((token) => api.vehicles.list(token))
@@ -177,6 +181,41 @@ export function VehiclesPage() {
       capacityM3: vehicle.capacityM3,
       status: vehicle.status,
     });
+  };
+
+  const loadDocuments = (vehicle: Vehicle) => {
+    withAuth((token) => api.vehicles.documents.list(token, vehicle.slug))
+      .then(setDocuments)
+      .catch((err: Error) => toast.error(err.message));
+  };
+
+  const openDocuments = (vehicle: Vehicle) => {
+    setDocumentVehicle(vehicle);
+    setDocuments([]);
+    setDocumentNumber("");
+    setDocumentDate("");
+    loadDocuments(vehicle);
+  };
+
+  const createDocument = async () => {
+    if (!documentVehicle || !documentNumber || !documentDate) return;
+    setIsSaving(true);
+    try {
+      await withAuth((token) => api.vehicles.documents.create(token, documentVehicle.slug, documentNumber, documentDate));
+      loadDocuments(documentVehicle);
+      setDocumentNumber("");
+      setDocumentDate("");
+      toast.success("Документ регистрации добавлен");
+    } catch (err) { toast.error((err as Error).message); }
+    finally { setIsSaving(false); }
+  };
+
+  const changeDocumentStatus = async (doc: VehicleDocument, status: VehicleDocument["status"]) => {
+    if (!documentVehicle) return;
+    try {
+      await withAuth((token) => api.vehicles.documents.updateStatus(token, documentVehicle.slug, doc.id, status));
+      loadDocuments(documentVehicle);
+    } catch (err) { toast.error((err as Error).message); }
   };
 
   return (
@@ -296,6 +335,7 @@ export function VehiclesPage() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge className={s.className}>{s.label}</Badge>
+                          <Button variant="ghost" size="sm" onClick={() => openDocuments(vehicle)}>Документы</Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -321,6 +361,29 @@ export function VehiclesPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={documentVehicle !== null} onOpenChange={(open) => { if (!open) setDocumentVehicle(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Документы ТС {documentVehicle?.plateNumber}</DialogTitle><DialogDescription>Действующая регистрация нужна для назначения рейса</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            {documents.length === 0 && <p className="text-sm text-gray-500">Документы не найдены</p>}
+            {documents.map((doc) => (
+              <div key={doc.id} className="border rounded-lg p-3 flex items-center justify-between gap-2 text-sm">
+                <div>Регистрация {doc.number}<div className="text-xs text-gray-500">До {new Date(doc.validUntil).toLocaleDateString("ru-RU")}</div></div>
+                <Select value={doc.status} onValueChange={(v) => changeDocumentStatus(doc, v as VehicleDocument["status"])}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="valid">Действует</SelectItem><SelectItem value="suspended">Приостановлен</SelectItem><SelectItem value="expired">Истёк</SelectItem></SelectContent>
+                </Select>
+              </div>
+            ))}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label>Номер регистрации</Label><Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} /></div>
+              <div className="space-y-1"><Label>Действует до</Label><Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} /></div>
+            </div>
+            <Button onClick={createDocument} disabled={isSaving || !documentNumber || !documentDate}>Добавить регистрацию</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Создание ТС */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

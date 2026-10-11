@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUser } from "@/lib/UserContext";
-import { api, type Manager } from "@/lib/api";
+import { api, type Manager, type Warehouse } from "@/lib/api";
 
 function shortId(id: string) {
   return id.slice(0, 8).toUpperCase();
@@ -54,6 +55,7 @@ interface CreateForm {
 export function ManagersPage() {
   const { withAuth } = useUser();
   const [managers, setManagers] = useState<Manager[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Manager | null>(null);
@@ -67,8 +69,12 @@ export function ManagersPage() {
       .finally(() => setIsLoading(false));
   }, [withAuth]);
 
+  useEffect(() => {
+    withAuth((token) => api.warehouses.list(token)).then(setWarehouses).catch(() => {});
+  }, [withAuth]);
+
   const handleCreate = async () => {
-    if (!form.email || !form.password || !form.fullName) return;
+    if (!form.email || !form.password || !form.fullName || !form.warehouseId) return;
     setIsSaving(true);
     try {
       const created = await withAuth((token) =>
@@ -76,7 +82,7 @@ export function ManagersPage() {
           email: form.email!,
           password: form.password!,
           fullName: form.fullName!,
-          warehouseId: form.warehouseId || null,
+          warehouseId: form.warehouseId!,
         }),
       );
       setManagers((prev) => [...prev, created]);
@@ -247,12 +253,11 @@ export function ManagersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>ID склада (необязательно)</Label>
-              <Input
-                placeholder="UUID склада"
-                value={form.warehouseId ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, warehouseId: e.target.value }))}
-              />
+              <Label>Склад *</Label>
+              <Select value={form.warehouseId ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, warehouseId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Выберите склад" /></SelectTrigger>
+                <SelectContent>{warehouses.filter((w) => w.status === "active").map((w) => <SelectItem key={w.id} value={w.id}>{w.name} — {w.address}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
             <div className="flex gap-2 justify-end">
               <Button
@@ -263,7 +268,7 @@ export function ManagersPage() {
               </Button>
               <Button
                 onClick={handleCreate}
-                disabled={isSaving || !form.email || !form.password || !form.fullName}
+                disabled={isSaving || !form.email || !form.password || !form.fullName || !form.warehouseId}
               >
                 {isSaving ? "Создание..." : "Создать"}
               </Button>

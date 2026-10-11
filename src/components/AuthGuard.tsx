@@ -53,6 +53,7 @@ export function MultiRoleAuthGuard({ allowedRoles, children }: MultiRoleAuthGuar
     }
   }, [user, isLoading, allowedRoles, router]);
 
+
   if (isLoading || !user || !allowedRoles.includes(user.role)) {
     return <DashboardSkeleton />;
   }
