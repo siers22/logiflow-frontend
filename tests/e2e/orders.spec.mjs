@@ -57,7 +57,7 @@ test('client creates a mixed-route draft, saves transport snapshot and submits w
 });
 test('manager receives cargo once and resolves automatic shortage before loading', async ({
   page,
-}) => {
+}, testInfo) => {
   const state = await setup(page, { role: 'manager', status: 'assigned' });
   await page.goto('/dashboard/orders/order-1');
   await page
@@ -78,7 +78,7 @@ test('manager receives cargo once and resolves automatic shortage before loading
   ).toHaveCount(0);
   expect(state.operations).toHaveLength(1);
   await page.screenshot({
-    path: '/private/tmp/logiflow-order-warehouse.png',
+    path: testInfo.outputPath('logiflow-order-warehouse.png'),
     fullPage: true,
   });
   await page
