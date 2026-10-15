@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   api,
   type Order,
@@ -34,6 +35,7 @@ export function AssignmentPanel({
   command: OrderCommand;
 }) {
   const { withAuth } = useUser();
+  const router = useRouter();
   const [drivers, setDrivers] = useState<Driver[]>([]),
     [vehicles, setVehicles] = useState<Vehicle[]>([]),
     [resourceError, setResourceError] = useState('');
@@ -150,9 +152,11 @@ export function AssignmentPanel({
                     comment.trim(),
                   ),
                 'Предложение отклонено',
+                () => router.replace('/dashboard/driver'),
               )
-            )
+            ) {
               setRejectOpen(false);
+            }
           }}
         >
           <Field label="Причина отказа *">
@@ -243,10 +247,10 @@ export function AssignmentPanel({
                 >
                   <strong>
                     {drivers.find((d) => d.id === candidate.driver_id)
-                      ?.licenseNumber ?? candidate.driver_id}{' '}
+                      ?.licenseNumber ?? 'Водитель недоступен'}{' '}
                     ·{' '}
                     {vehicles.find((v) => v.id === candidate.vehicle_id)
-                      ?.plateNumber ?? candidate.vehicle_id}
+                      ?.plateNumber ?? 'Машина недоступна'}
                   </strong>
                   <p>
                     Оценка: {candidate.score} · {candidate.reason}
@@ -322,7 +326,7 @@ export function AssignmentPanel({
                 >
                   <option value="">Выберите водителя</option>
                   {driverId && !drivers.some((d) => d.id === driverId) && (
-                    <option value={driverId}>{driverId}</option>
+                    <option value={driverId}>Выбранный водитель недоступен</option>
                   )}
                   {drivers.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -342,7 +346,7 @@ export function AssignmentPanel({
                 >
                   <option value="">Выберите машину</option>
                   {vehicleId && !vehicles.some((v) => v.id === vehicleId) && (
-                    <option value={vehicleId}>{vehicleId}</option>
+                    <option value={vehicleId}>Выбранная машина недоступна</option>
                   )}
                   {vehicles.map((v) => (
                     <option key={v.id} value={v.id}>

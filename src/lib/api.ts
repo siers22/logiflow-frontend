@@ -231,6 +231,11 @@ export type OrderStatus =
   | 'completed'
   | 'cancelled';
 
+export type OrderReferences = Record<
+  'users' | 'drivers' | 'vehicles' | 'warehouses' | 'assignments',
+  Record<string, string>
+>;
+
 export interface Order {
   id: string;
   createdById: string | null;
@@ -1004,6 +1009,8 @@ export const api = {
   },
 
   orders: {
+    references: async (token: string, id: string): Promise<OrderReferences> =>
+      entity(await request(`/v1/orders/${id}/references`, {}, token), 'references') as OrderReferences,
     list: async (
       accessToken: string,
       params?: ListOrdersParams,
@@ -1325,6 +1332,11 @@ export const api = {
     },
   },
   handovers: {
+    incoming: async (token: string): Promise<TripHandover[]> =>
+      list<TripHandover>(
+        await request('/v1/handovers/incoming', {}, token),
+        'handovers',
+      ).map(mapHandover),
     list: async (token: string, id: string): Promise<TripHandover[]> =>
       list<TripHandover>(
         await request(`/v1/orders/${id}/handovers`, {}, token),

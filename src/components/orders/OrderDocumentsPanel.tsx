@@ -139,7 +139,8 @@ export function OrderDocumentsPanel({ orderId }: { orderId: string }) {
       )}
       {!loading && !error && !limited && !documents.length && (
         <p className="text-sm text-muted-foreground">
-          Документы пока не появились. Они формируются асинхронно; обновите
+          Доступных вам документов этого заказа пока нет. Документы формируются
+          асинхронно и выдаются конкретным участникам перевозки. Обновите
           список позже.
         </p>
       )}

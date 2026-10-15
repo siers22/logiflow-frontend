@@ -166,10 +166,20 @@ test('failed prerequisites never authorize operations', () => {
   }
 });
 test("expired and other drivers' offers cannot be accepted", () => {
-  const patch = { assignment: { ...trip, status: 'pending_acceptance' } };
+  const patch = {
+    order: { ...order, status: 'ready_for_dispatch' },
+    assignment: { ...trip, status: 'pending_acceptance' },
+  };
   assert.equal(run(driver, patch).accept, true);
+  assert.equal(run(driver, patch).reject, true);
+  for (const status of ['draft', 'assigned', 'in_transit', 'arrived', 'completed', 'cancelled']) {
+    const actions = run(driver, { ...patch, order: { ...order, status } });
+    assert.equal(actions.accept, false);
+    assert.equal(actions.reject, false);
+  }
   assert.equal(
     run(driver, {
+      ...patch,
       assignment: {
         ...patch.assignment,
         offerExpiresAt: '2000-01-01T00:00:00Z',

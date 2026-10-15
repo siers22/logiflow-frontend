@@ -138,12 +138,12 @@ export function orderActions(input: {
       !has('return_to_sender'),
     accept:
       mine &&
-      o.status === 'assigned' &&
+      o.status === 'ready_for_dispatch' &&
       trip?.status === 'pending_acceptance' &&
       unexpired,
     reject:
       mine &&
-      o.status === 'assigned' &&
+      o.status === 'ready_for_dispatch' &&
       trip?.status === 'pending_acceptance' &&
       unexpired,
     start:

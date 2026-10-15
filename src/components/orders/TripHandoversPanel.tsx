@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, NativeSelect } from './Fields';
+import { ReferenceLabel } from './OrderReferences';
 export function TripHandoversPanel({
   order,
   assignments,
@@ -111,8 +112,7 @@ export function TripHandoversPanel({
       )}
       {actor.role === 'driver' && (
         <p className="text-sm text-muted-foreground">
-          Входящие передачи пока доступны по ссылке на заказ от диспетчера:
-          сервер не предоставляет отдельный список приглашений.
+          Входящие передачи доступны в разделе «Мои рейсы».
         </p>
       )}
       {canCreate && handovers && !pending && active && (
@@ -261,7 +261,7 @@ export function TripHandoversPanel({
               }
             </strong>
             <p>
-              Новое назначение: водитель {h.driverId} · машина {h.vehicleId}
+              Принимает: <ReferenceLabel kind="drivers" id={h.driverId} /> · Машина: <ReferenceLabel kind="vehicles" id={h.vehicleId} />
             </p>
             <p>
               {h.location} · {h.reason}
@@ -275,8 +275,8 @@ export function TripHandoversPanel({
                 : 'не подтвердил'}
             </p>
             <p className="text-xs text-muted-foreground">
-              Прежнее назначение: {h.previousAssignmentId}
-              {h.nextAssignmentId && ` · Новое: ${h.nextAssignmentId}`}
+              Прежний рейс: <ReferenceLabel kind="assignments" id={h.previousAssignmentId} />
+              {h.nextAssignmentId && <> · Новый рейс: <ReferenceLabel kind="assignments" id={h.nextAssignmentId} /></>}
             </p>
             {live &&
               actor.role === 'driver' &&

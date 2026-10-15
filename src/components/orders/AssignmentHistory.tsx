@@ -1,4 +1,5 @@
 import type { Assignment, AssignmentStatus } from '@/lib/api';
+import { ReferenceLabel } from './OrderReferences';
 const labels: Record<AssignmentStatus, string> = {
   pending_acceptance: 'Ожидают ответа',
   accepted: 'Приняты',
@@ -33,7 +34,7 @@ export function AssignmentHistory({
                   className="space-y-1 rounded-lg border p-3 text-sm break-words"
                 >
                   <p>
-                    Водитель: {a.driverId} · Машина рейса: {a.vehicleId}
+                    Водитель: <ReferenceLabel kind="drivers" id={a.driverId} /> · Машина рейса: <ReferenceLabel kind="vehicles" id={a.vehicleId} />
                   </p>
                   <p>
                     {a.plannedFrom ? format(a.plannedFrom) : '—'} —{' '}
@@ -43,7 +44,7 @@ export function AssignmentHistory({
                     {a.source === 'dispatch_recommendation'
                       ? 'По рекомендации'
                       : 'Ручное назначение'}{' '}
-                    · Автор: {a.createdByUserId || '—'}
+                    · Автор: <ReferenceLabel kind="users" id={a.createdByUserId} />
                     {a.assignedAt && ` · Предложено: ${format(a.assignedAt)}`}
                   </p>
                   {a.status === 'pending_acceptance' && (

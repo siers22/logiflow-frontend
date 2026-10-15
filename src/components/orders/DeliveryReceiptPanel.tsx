@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from './Fields';
+import { ReferenceLabel } from './OrderReferences';
 export function DeliveryReceiptPanel({
   order,
   assignment,
@@ -54,7 +55,7 @@ export function DeliveryReceiptPanel({
         </p>
         <p className="text-xs text-muted-foreground">
           Записано: {new Date(receipt.recordedAt).toLocaleString('ru-RU')} ·{' '}
-          {receipt.recordedByUserId}. Изменение записи недоступно.
+          <ReferenceLabel kind="users" id={receipt.recordedByUserId} />. Изменение записи недоступно.
         </p>
       </div>
     );

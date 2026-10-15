@@ -64,6 +64,15 @@ const handover = {
 };
 const matrix = [
   [
+    'orders.references',
+    '/api/v1/orders/id/references',
+    'GET',
+    undefined,
+    'references',
+    { users: { u: 'Анна' }, drivers: {}, vehicles: {}, warehouses: {}, assignments: {} },
+    () => api.orders.references('token', 'id'),
+  ],
+  [
     'counterparties.list',
     '/api/v1/counterparties?limit=20&offset=40&includeArchived=true',
     'GET',
@@ -207,6 +216,15 @@ const matrix = [
     'success',
     { status: 'ready', candidates: [] },
     () => api.dispatch.refresh('token', 'id'),
+  ],
+  [
+    'handovers.incoming',
+    '/api/v1/handovers/incoming',
+    'GET',
+    undefined,
+    'handovers',
+    [entity],
+    () => api.handovers.incoming('token'),
   ],
   [
     'handovers.list',

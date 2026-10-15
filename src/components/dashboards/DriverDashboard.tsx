@@ -40,6 +40,7 @@ import {
   type DriverStatus,
   type Order,
   type Route,
+  type TripHandover,
   type Vehicle,
 } from '@/lib/api';
 import { RouteMap } from '@/components/RouteMap';
@@ -69,6 +70,8 @@ export function DriverDashboard() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [incomingHandovers, setIncomingHandovers] = useState<TripHandover[]>([]);
+  const [handoversError, setHandoversError] = useState<string | null>(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [route, setRoute] = useState<Route | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -92,6 +95,15 @@ export function DriverDashboard() {
   const loadOrders = useCallback(() => {
     if (!driver) return;
     setIsLoadingOrders(true);
+    withAuth((token) => api.handovers.incoming(token))
+      .then((items) => {
+        setIncomingHandovers(items);
+        setHandoversError(null);
+      })
+      .catch(() => {
+        setIncomingHandovers([]);
+        setHandoversError('Не удалось загрузить входящие передачи.');
+      });
     Promise.all([
       withAuth((token) => api.orders.list(token)),
       withAuth((token) => api.assignments.list(token)),
@@ -367,6 +379,40 @@ export function DriverDashboard() {
           </CardContent>
         </Card>
 
+        <Card variant="glass">
+          <CardHeader>
+            <CardTitle>Входящие передачи груза</CardTitle>
+            <CardDescription>
+              Откройте заказ, чтобы проверить груз и подтвердить приём после передающего водителя
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {handoversError ? (
+              <div role="alert">
+                <p>{handoversError}</p>
+                <Button variant="outline" onClick={loadOrders}>Повторить загрузку передач</Button>
+              </div>
+            ) : incomingHandovers.length === 0 ? (
+              <p className="text-sm text-gray-500">Входящих передач нет</p>
+            ) : incomingHandovers.map((handover) => (
+              <div key={handover.id} className="border rounded-lg p-3 flex items-center justify-between gap-3">
+                <div className="text-sm">
+                  Заказ #{shortId(handover.orderId)}
+                  <p>{handover.location}</p>
+                  <p>{handover.reason}</p>
+                  <p className="text-xs text-gray-500">
+                    До {new Date(handover.expiresAt).toLocaleString('ru-RU')} ·{' '}
+                    {handover.outgoingConfirmedAt ? 'Передача подтверждена водителем' : 'Ожидается передающий водитель'}
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link href={`/dashboard/orders/${handover.orderId}`}>Открыть передачу</Link>
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         {/* Текущий рейс */}
         {activeOrder && (
           <Card variant="glass">
@@ -479,7 +525,7 @@ export function DriverDashboard() {
             <CardTitle className="flex items-center gap-2">
               <Package className="w-5 h-5" /> История поездок
             </CardTitle>
-            <CardDescription>Завершённые перевозки</CardDescription>
+            <CardDescription>Завершённые и переданные рейсы</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-[380px] overflow-y-auto">
@@ -493,7 +539,7 @@ export function DriverDashboard() {
                 </p>
               ) : (
                 completedOrders.map((order) => (
-                  <div key={order.id} className="border rounded-lg p-3">
+                  <Link key={order.id} href={`/dashboard/orders/${order.id}`} className="block border rounded-lg p-3 hover:bg-muted/50 focus-visible:outline focus-visible:outline-2">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
@@ -503,7 +549,7 @@ export function DriverDashboard() {
                           {order.cargoDescription ?? 'Без описания'}
                         </p>
                       </div>
-                      <StatusBadge status="completed" />
+                      <StatusBadge status={order.status} />
                     </div>
                     {order.deliveredAt && (
                       <p className="text-xs text-gray-500">
@@ -517,7 +563,7 @@ export function DriverDashboard() {
                         {order.totalPrice.toLocaleString('ru-RU')} ₽
                       </p>
                     )}
-                  </div>
+                  </Link>
                 ))
               )}
             </div>

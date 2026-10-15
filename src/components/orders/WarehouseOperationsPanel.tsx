@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from './Fields';
+import { ReferenceLabel } from './OrderReferences';
 export const operationLabels: Record<WarehouseOperationType, string> = {
   receive: 'Принять отправление',
   load: 'Подтвердить погрузку',
@@ -181,8 +182,8 @@ export function WarehouseOperationsPanel({
           {op.comment && <p>{op.comment}</p>}
           {op.recipientName && <p>Получатель: {op.recipientName}</p>}
           <p className="text-xs text-muted-foreground">
-            Склад: {op.warehouseId} · Подтвердил: {op.createdByUserId}
-            {op.assignmentId && ` · Назначение: ${op.assignmentId}`}
+            Склад: <ReferenceLabel kind="warehouses" id={op.warehouseId} /> · Подтвердил: <ReferenceLabel kind="users" id={op.createdByUserId} />
+            {op.assignmentId && <> · Рейс: <ReferenceLabel kind="assignments" id={op.assignmentId} /></>}
           </p>
         </article>
       ))}

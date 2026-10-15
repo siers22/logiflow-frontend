@@ -10,10 +10,12 @@ import {
   type DeliveryReceipt,
   type WarehouseOperation,
   type OrderIncident,
+  type OrderReferences,
 } from '@/lib/api';
 import { errorMessage } from '@/lib/api-errors';
 import { useUser } from '@/lib/UserContext';
 type State = {
+  references: OrderReferences | null;
   order: Order | null;
   assignments: Assignment[] | null;
   operations: WarehouseOperation[] | null;
@@ -24,6 +26,7 @@ type State = {
   loading: boolean;
 };
 const empty: State = {
+  references: null,
   order: null,
   assignments: null,
   operations: null,
@@ -62,7 +65,9 @@ export function useOrderWorkspace(orderId: string) {
     } catch (err) {
       if (live())
         setState((previous) => ({
-          ...previous,
+          ...(err instanceof ApiError && [403, 404].includes(err.status)
+            ? empty
+            : previous),
           loading: false,
           errors: { ...previous.errors, order: errorMessage(err) },
         }));
@@ -70,6 +75,7 @@ export function useOrderWorkspace(orderId: string) {
       return;
     }
     const requests = {
+      references: () => withAuth((token) => api.orders.references(token, orderId)),
       operations: () =>
         withAuth((token) => api.warehouseOperations.list(token, orderId)),
       incidents: () => withAuth((token) => api.incidents.list(token, orderId)),
@@ -133,6 +139,7 @@ export function useOrderWorkspace(orderId: string) {
     async (
       execute: (token: string) => Promise<unknown>,
       success: string,
+      onSuccess?: () => void,
     ): Promise<boolean> => {
       if (lock.current) return false;
       lock.current = true;
@@ -142,6 +149,11 @@ export function useOrderWorkspace(orderId: string) {
         if (currentOrder.current !== orderId) return false;
         toast.success(success);
         window.dispatchEvent(new Event('logiflow:changed'));
+        if (onSuccess) {
+          // Navigation replaces refresh when the command revokes access to this order.
+          onSuccess();
+          return true;
+        }
         await refresh();
         return true;
       } catch (err) {

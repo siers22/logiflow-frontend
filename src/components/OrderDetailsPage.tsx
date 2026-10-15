@@ -26,6 +26,7 @@ import { DeliveryReceiptPanel } from '@/components/orders/DeliveryReceiptPanel';
 import { TripHandoversPanel } from '@/components/orders/TripHandoversPanel';
 import { OrderDocumentsPanel } from '@/components/orders/OrderDocumentsPanel';
 import { AssignmentHistory } from '@/components/orders/AssignmentHistory';
+import { OrderReferencesProvider, ReferenceLabel } from '@/components/orders/OrderReferences';
 import { AssignmentPanel } from '@/components/orders/AssignmentPanel';
 import { OrderIncidentsPanel } from '@/components/orders/OrderIncidentsPanel';
 const noAssignments: import('@/lib/api').Assignment[] = [];
@@ -105,8 +106,10 @@ export function OrderDetailsPage({ orderId }: { orderId: string }) {
   });
   const blockers = submitBlockers(order, route);
   return (
+    <OrderReferencesProvider labels={state.references} operations={operations}>
     <DashboardLayout>
       <div className="space-y-6">
+        {retry('references')}
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" onClick={() => router.back()}>
             Назад
@@ -380,7 +383,7 @@ export function OrderDetailsPage({ orderId }: { orderId: string }) {
                     {new Date(order.transportDetails.recordedAt).toLocaleString(
                       'ru-RU',
                     )}{' '}
-                    · {order.transportDetails.recordedByUserId}
+                    · <ReferenceLabel kind="users" id={order.transportDetails.recordedByUserId} />
                   </p>
                 </>
               ) : (
@@ -556,5 +559,6 @@ export function OrderDetailsPage({ orderId }: { orderId: string }) {
         </Dialog>
       </div>
     </DashboardLayout>
+    </OrderReferencesProvider>
   );
 }

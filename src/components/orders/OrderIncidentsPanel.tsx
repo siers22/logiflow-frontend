@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, NativeSelect } from './Fields';
+import { ReferenceLabel } from './OrderReferences';
 const kinds: Record<IncidentKind, string> = {
   vehicle_breakdown: 'Поломка машины',
   cargo_damage: 'Повреждение груза',
@@ -270,10 +271,10 @@ export function OrderIncidentsPanel({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Сообщил: {incident.reportedByUserId} ·{' '}
+            Сообщил: <ReferenceLabel kind="users" id={incident.reportedByUserId} /> ·{' '}
             {new Date(incident.reportedAt).toLocaleString('ru-RU')}
             {incident.sourceOperationId &&
-              ` · Операция: ${incident.sourceOperationId}`}
+              <> · Операция: <ReferenceLabel kind="operations" id={incident.sourceOperationId} /></>}
           </p>
           {incident.status === 'resolved' ? (
             <div className="mt-3 border-t pt-3">
@@ -285,7 +286,7 @@ export function OrderIncidentsPanel({
                 <p>Получатель: {incident.recipientName}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {incident.resolvedByUserId} ·{' '}
+                Решение принял: <ReferenceLabel kind="users" id={incident.resolvedByUserId} /> ·{' '}
                 {incident.resolvedAt &&
                   new Date(incident.resolvedAt).toLocaleString('ru-RU')}
               </p>
